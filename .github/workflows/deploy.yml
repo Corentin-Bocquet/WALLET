@@ -2,9 +2,7 @@ name: Déploiement
 
 on:
   push:
-    branches:
-      - main
-      - 'claude/**'
+    branches: [main]
     paths:
       - 'app/**'
       - '.github/workflows/deploy.yml'
@@ -44,11 +42,13 @@ jobs:
           };
           EOF
 
-      # enablement: true active GitHub Pages via l'API si ce n'est pas déjà
-      # fait, ce qui évite d'avoir à le cocher à la main dans les réglages.
+      # GitHub Pages doit être activé UNE FOIS à la main, dans
+      # Settings → Pages → Source : GitHub Actions.
+      # L'option `enablement: true` de cette action ne suffit pas : créer un
+      # site Pages exige la permission `administration: write`, que le token
+      # d'un workflow ne peut pas obtenir. Tant que ce n'est pas fait, l'étape
+      # échoue avec « Resource not accessible by integration ».
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
