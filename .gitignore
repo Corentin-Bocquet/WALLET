@@ -1,0 +1,17 @@
+# Dépendances et artefacts
+node_modules/
+dist/
+*.log
+
+# Secrets — ne doivent JAMAIS être versionnés
+.env
+.env.*
+!.env.example
+supabase/functions/.env
+supabase/.temp/
+**/.DS_Store
+
+# Base locale et sorties de tests
+/var/tmp/wallet-pg/
+/tmp/shots/
+coverage/

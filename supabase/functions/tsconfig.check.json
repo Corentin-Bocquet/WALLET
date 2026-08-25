@@ -1,0 +1,17 @@
+{
+  "//": "Vérification de syntaxe et de types des Edge Functions sans Deno installé. Les imports distants (jsr:, npm:) et les globales Deno ne sont pas résolus ici : ce contrôle attrape les erreurs de syntaxe et de types locaux, pas la résolution de modules.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": false,
+    "noEmit": true,
+    "allowJs": false,
+    "skipLibCheck": true,
+    "types": [],
+    "noImplicitAny": false,
+    "allowImportingTsExtensions": true
+  },
+  "include": ["**/*.ts"]
+}
