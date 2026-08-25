@@ -1,0 +1,24 @@
+{
+  "name": "wallet",
+  "version": "1.0.0",
+  "description": "Patrimoine, crypto et banque personnelle — PWA mobile-first",
+  "private": true,
+  "type": "module",
+  "//": "Aucune dépendance de PRODUCTION : app/ est déployable tel quel, sans build. Les paquets ci-dessous ne servent qu'aux tests et aux vérifications.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:schema": "scripts/verify-schema.sh",
+    "test:e2e": "node tests/e2e.mjs",
+    "check:functions": "cd supabase/functions && tsc -p tsconfig.check.json",
+    "build:icons": "node scripts/build-icons.mjs",
+    "build:glossary": "node scripts/build-glossary.mjs",
+    "serve": "python3 -m http.server 8099 --directory app"
+  },
+  "devDependencies": {
+    "playwright": "^1.49.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

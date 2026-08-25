@@ -22,6 +22,7 @@ import { bubbleChart, barList } from '../components/chart.js';
 import { money, pct, day as fmtDay, month as fmtMonth, titleCase, trendClass } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import { BUCKET_LABEL } from '../engine/normalize.js';
+import { selectSimilarTransactions } from '../engine/categorizer.js';
 import { CADENCE_LABEL, monthlyRecurringCost } from '../engine/recurring.js';
 
 /* ================================================================== */
@@ -440,10 +441,9 @@ async function proposeSimilar(tx, category, result, onChange) {
   const bucket = result?.bucket;
 
   const similar = await repo.listTransactions({ status: 'all', limit: 500 })
-    .then((rows) => rows.filter((t) => t.id !== tx.id
-      && (t.merchant || t.clean_label) === key
-      && t.category_source !== 'user'
-      && t.category_id !== category.id))
+    .then((rows) => selectSimilarTransactions(rows, {
+      excludeId: tx.id, key, bucket, categoryId: category.id,
+    }))
     .catch(() => []);
 
   if (!similar.length) return;

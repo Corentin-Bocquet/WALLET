@@ -5,7 +5,9 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { categorize, memoryConfidence, LEXICON } from '../app/js/engine/categorizer.js';
+import {
+  categorize, memoryConfidence, LEXICON, selectSimilarTransactions,
+} from '../app/js/engine/categorizer.js';
 import { normalizeLabel, amountBucket } from '../app/js/engine/normalize.js';
 
 /* — Fixtures ————————————————————————————————————————— */
@@ -239,4 +241,52 @@ test('chaque résultat porte une raison lisible', () => {
     assert.ok(typeof out.confidence === 'number');
     assert.ok(out.bucket && amountBucket(-45));
   }
+});
+
+/* — 8. Étendre une correction aux transactions similaires ————— */
+
+test("l'extension d'une correction respecte l'ordre de grandeur", () => {
+  const rows = [
+    { id: 'a', merchant: 'amazon', amount: -12, category_id: 'cat-shopping', category_source: 'heuristic' },
+    { id: 'b', merchant: 'amazon', amount: -24, category_id: 'cat-shopping', category_source: 'heuristic' },
+    { id: 'c', merchant: 'amazon', amount: -480, category_id: 'cat-shopping', category_source: 'heuristic' },
+    { id: 'd', merchant: 'carrefour', amount: -22, category_id: 'cat-shopping', category_source: 'heuristic' },
+  ];
+
+  const similar = selectSimilarTransactions(rows, {
+    excludeId: 'a', key: 'amazon', bucket: 'small', categoryId: 'cat-alimentation',
+  });
+
+  assert.deepEqual(similar.map((t) => t.id), ['b'],
+    'seul l’autre petit Amazon doit être proposé');
+});
+
+test("un choix explicite de l'utilisateur n'est jamais écrasé", () => {
+  const rows = [
+    { id: 'b', merchant: 'amazon', amount: -24, category_id: 'cat-shopping', category_source: 'user' },
+    { id: 'c', merchant: 'amazon', amount: -18, category_id: 'cat-shopping', category_source: 'memory' },
+  ];
+  const similar = selectSimilarTransactions(rows, {
+    excludeId: 'a', key: 'amazon', bucket: 'small', categoryId: 'cat-alimentation',
+  });
+  assert.deepEqual(similar.map((t) => t.id), ['c']);
+});
+
+test('les transactions déjà dans la bonne catégorie ne sont pas proposées', () => {
+  const rows = [
+    { id: 'b', merchant: 'amazon', amount: -24, category_id: 'cat-alimentation', category_source: 'memory' },
+  ];
+  assert.equal(selectSimilarTransactions(rows, {
+    excludeId: 'a', key: 'amazon', bucket: 'small', categoryId: 'cat-alimentation',
+  }).length, 0);
+});
+
+test('sans seau précisé, tous les montants du marchand sont concernés', () => {
+  const rows = [
+    { id: 'b', merchant: 'amazon', amount: -24, category_id: 'cat-shopping', category_source: 'heuristic' },
+    { id: 'c', merchant: 'amazon', amount: -480, category_id: 'cat-shopping', category_source: 'heuristic' },
+  ];
+  assert.equal(selectSimilarTransactions(rows, {
+    excludeId: 'a', key: 'amazon', categoryId: 'cat-alimentation',
+  }).length, 2);
 });

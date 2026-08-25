@@ -404,4 +404,30 @@ function alternativesFor(slug, categoriesBySlug, tx) {
     .slice(0, 3);
 }
 
+/**
+ * Transactions auxquelles une correction pourrait être étendue.
+ *
+ * Le filtre par ordre de grandeur est essentiel : la mémoire vient d'apprendre
+ * un choix POUR CE SEAU DE MONTANT. Étendre la correction à tous les montants
+ * annulerait l'exception que le moteur cherche justement à préserver (§12).
+ *
+ * Les transactions déjà corrigées à la main sont exclues : un choix explicite
+ * ne se fait pas écraser par un autre choix explicite.
+ *
+ * @param {Array}  transactions  toutes les transactions connues
+ * @param {object} options       { excludeId, key, bucket, categoryId }
+ */
+export function selectSimilarTransactions(transactions, {
+  excludeId, key, bucket, categoryId,
+} = {}) {
+  if (!key) return [];
+  return (transactions || []).filter((tx) => {
+    if (tx.id === excludeId) return false;
+    if ((tx.merchant || tx.clean_label) !== key) return false;
+    if (bucket && amountBucket(tx.amount) !== bucket) return false;
+    if (tx.category_source === 'user') return false;
+    return tx.category_id !== categoryId;
+  });
+}
+
 export { BUCKETS };

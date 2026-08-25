@@ -44,7 +44,7 @@ Pour brancher vos vraies données : **[docs/INSTALLATION.md](docs/INSTALLATION.m
 | PWA : manifest, service worker, icônes, splash | ✅ |
 | **Synchronisation bancaire automatique** | ⛔ **impossible gratuitement** — voir ci-dessous |
 
-**99 tests JavaScript + 3 suites SQL (isolation RLS, apprentissage, anomalies), tous verts.**
+**103 tests JavaScript + 3 suites SQL (isolation RLS, apprentissage, anomalies), tous verts.**
 
 ---
 
@@ -112,7 +112,7 @@ supabase/
   migrations/           10 migrations SQL, appliquées dans l'ordre
   functions/            Edge Functions Deno
 
-tests/                  99 tests JavaScript (7 fichiers)
+tests/                  103 tests JavaScript (7 fichiers)
 tests/sql/              3 suites SQL (RLS, apprentissage, anomalies)
 scripts/                Vérification du schéma, génération des icônes
 docs/                   Installation, gratuité, sécurité, design, moteur

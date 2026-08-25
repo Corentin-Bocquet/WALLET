@@ -58,3 +58,17 @@ jobs:
         run: |
           export PGHOST=/var/tmp PGPORT=55432
           node --test tests/glossary.test.js
+
+      # --- Parcours réel dans un navigateur ------------------------------
+      # Vérifie ce qu'aucun test unitaire ne peut vérifier : qu'une correction
+      # de catégorie faite au doigt survit à un rechargement complet.
+      - name: Parcours de bout en bout
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          python3 -m http.server 8099 --directory app &
+          for i in $(seq 1 20); do
+            curl -sf http://127.0.0.1:8099/index.html >/dev/null && break
+            sleep 1
+          done
+          node tests/e2e.mjs
