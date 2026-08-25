@@ -162,6 +162,50 @@ test('un écart statistiquement fort mais dérisoire en euros est ignoré', () =
     '4 € de plus sur un café n’est pas une information');
 });
 
+test('un plein de courses n’est pas une anomalie parce que la catégorie contient des baguettes', () => {
+  // Distribution bimodale réaliste : boulangerie quotidienne + courses hebdo,
+  // toutes deux dans « alimentation ». La médiane de catégorie tombe à ~4 €.
+  const items = [
+    ...Array.from({ length: 24 }, (_, i) =>
+      tx('boulangerie martin', -(3 + (i % 4) * 0.5), i * 3, { category_id: 'cat-alim' })),
+    ...Array.from({ length: 12 }, (_, i) =>
+      tx('carrefour market', -(48 + (i % 5) * 6), i * 7, { category_id: 'cat-alim' })),
+  ];
+
+  const found = detectAnomalies(items, { now: NOW });
+  assert.equal(found.length, 0,
+    'aucun de ces achats n’est inhabituel pour son propre marchand');
+});
+
+test('mais un plein de courses au double du panier habituel ressort', () => {
+  const items = [
+    ...Array.from({ length: 24 }, (_, i) =>
+      tx('boulangerie martin', -(3 + (i % 4) * 0.5), i * 3, { category_id: 'cat-alim' })),
+    ...Array.from({ length: 12 }, (_, i) =>
+      tx('carrefour market', -(48 + (i % 5) * 6), i * 7, { category_id: 'cat-alim' })),
+    tx('carrefour market', -410, 2, { category_id: 'cat-alim' }),
+  ];
+
+  const found = detectAnomalies(items, { now: NOW });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].amount, 410);
+  assert.equal(found[0].basis, 'merchant',
+    'la comparaison doit se faire contre les autres passages chez Carrefour');
+  assert.match(found[0].explanation, /carrefour market/);
+});
+
+test('un marchand inconnu est comparé à sa catégorie, avec une exigence plus stricte', () => {
+  const items = [
+    ...Array.from({ length: 12 }, (_, i) =>
+      tx('resto habituel', -(32 + (i % 4) * 3), i * 8, { category_id: 'cat-resto' })),
+    tx('le grand restaurant', -184.5, 3, { category_id: 'cat-resto' }),
+  ];
+  const found = detectAnomalies(items, { now: NOW });
+  assert.equal(found.length, 1);
+  assert.equal(found[0].basis, 'category');
+  assert.equal(found[0].amount, 184.5);
+});
+
 test('un loyer rattaché à une récurrence n’est jamais une anomalie', () => {
   const items = [
     ...Array.from({ length: 10 }, (_, i) => tx('divers', -40, i * 9, { category_id: 'cat-log' })),
