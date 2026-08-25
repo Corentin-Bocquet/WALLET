@@ -282,10 +282,19 @@ export async function monthlySummary(month) {
 
   let income = 0;
   let expense = 0;
+  let invested = 0;
   let count = 0;
   for (const tx of rows) {
     if (tx.status !== 'active') continue;
-    if (kindById.get(tx.category_id) === 'transfer') continue;
+    const kind = kindById.get(tx.category_id) ?? 'expense';
+    // Un virement interne n'est ni un revenu ni une dépense.
+    if (kind === 'transfer') continue;
+    // Acheter un actif n'est pas consommer : c'est déplacer de l'épargne.
+    if (kind === 'investment') {
+      if (tx.amount < 0) invested += -tx.amount;
+      count += 1;
+      continue;
+    }
     if (tx.amount > 0) income += tx.amount; else expense += -tx.amount;
     count += 1;
   }
@@ -294,6 +303,7 @@ export async function monthlySummary(month) {
     month: start,
     income: round2(income),
     expense: round2(expense),
+    invested: round2(invested),
     net_savings: round2(income - expense),
     // null, pas 0 : sans revenu connu, le taux n'est pas mesurable (§46)
     savings_rate: income > 0 ? round2(((income - expense) / income) * 100) : null,
@@ -314,7 +324,7 @@ export async function categoryBreakdown(month, kind = 'expense') {
   for (const tx of rows) {
     if (tx.status !== 'active') continue;
     const category = byId.get(tx.category_id);
-    if (category?.kind === 'transfer') continue;
+    if (category?.kind === 'transfer' || category?.kind === 'investment') continue;
     if (kind === 'expense' ? tx.amount >= 0 : tx.amount <= 0) continue;
 
     const key = tx.category_id || 'uncategorized';

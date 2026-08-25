@@ -82,23 +82,23 @@ const RECURRING_MERCHANTS = [
 ];
 
 const ONE_OFF = [
-  { label: 'CB CARREFOUR MARKET', slug: 'alimentation', min: 18, max: 92, weekly: 1.6 },
-  { label: 'CB LIDL', slug: 'alimentation', min: 12, max: 58, weekly: 0.7 },
-  { label: 'CB BOULANGERIE MARTIN', slug: 'alimentation', min: 2.4, max: 9.8, weekly: 2.2 },
-  { label: 'CB UBER EATS', slug: 'restaurant', min: 14, max: 38, weekly: 0.8 },
-  { label: 'CB LE COMPTOIR RESTAURANT', slug: 'restaurant', min: 22, max: 64, weekly: 0.5 },
-  { label: 'CB BIERE BAR X', slug: 'bar', min: 8, max: 26, weekly: 0.9 },
+  { label: 'CB CARREFOUR MARKET', slug: 'alimentation', min: 16, max: 74, weekly: 1.2 },
+  { label: 'CB LIDL', slug: 'alimentation', min: 11, max: 44, weekly: 0.5 },
+  { label: 'CB BOULANGERIE MARTIN', slug: 'alimentation', min: 2.4, max: 9.8, weekly: 1.8 },
+  { label: 'CB UBER EATS', slug: 'restaurant', min: 14, max: 34, weekly: 0.5 },
+  { label: 'CB LE COMPTOIR RESTAURANT', slug: 'restaurant', min: 20, max: 52, weekly: 0.35 },
+  { label: 'CB BIERE BAR X', slug: 'bar', min: 8, max: 24, weekly: 0.7 },
   { label: 'CB STARBUCKS', slug: 'bar', min: 3.5, max: 8.9, weekly: 0.6 },
-  { label: 'CB SNCF CONNECT', slug: 'transport', min: 24, max: 118, weekly: 0.18 },
-  { label: 'CB TOTALENERGIES STATION', slug: 'transport', min: 42, max: 78, weekly: 0.3 },
-  { label: 'CB AMAZON.FR', slug: 'shopping', min: 9, max: 240, weekly: 0.7 },
-  { label: 'CB FNAC', slug: 'shopping', min: 15, max: 190, weekly: 0.15 },
-  { label: 'CB DECATHLON', slug: 'sport', min: 18, max: 145, weekly: 0.16 },
+  { label: 'CB SNCF CONNECT', slug: 'transport', min: 22, max: 92, weekly: 0.12 },
+  { label: 'CB TOTALENERGIES STATION', slug: 'transport', min: 40, max: 68, weekly: 0.22 },
+  { label: 'CB AMAZON.FR', slug: 'shopping', min: 9, max: 96, weekly: 0.45 },
+  { label: 'CB FNAC', slug: 'shopping', min: 14, max: 88, weekly: 0.08 },
+  { label: 'CB DECATHLON', slug: 'sport', min: 16, max: 78, weekly: 0.1 },
   { label: 'CB PHARMACIE DU CENTRE', slug: 'sante', min: 6, max: 42, weekly: 0.22 },
   { label: 'CB UGC CINE CITE', slug: 'loisirs', min: 11, max: 24, weekly: 0.3 },
-  { label: 'CB STEAM GAMES', slug: 'loisirs', min: 6, max: 60, weekly: 0.2 },
-  { label: 'CB BOOKING.COM', slug: 'voyage', min: 120, max: 420, weekly: 0.05 },
-  { label: 'CB ZARA', slug: 'shopping', min: 25, max: 120, weekly: 0.2 },
+  { label: 'CB STEAM GAMES', slug: 'loisirs', min: 6, max: 44, weekly: 0.15 },
+  { label: 'CB BOOKING.COM', slug: 'voyage', min: 110, max: 320, weekly: 0.03 },
+  { label: 'CB ZARA', slug: 'shopping', min: 22, max: 88, weekly: 0.12 },
   { label: 'VIR RECU REMBOURSEMENT AMELI', slug: 'remboursement', min: 12, max: 68, weekly: 0.12, credit: true },
 ];
 
@@ -167,7 +167,7 @@ export function generateTransactions({ months = 18, seed = 20260101, accountId =
   /* Quelques faits marquants, pour que les écrans aient de la matière. */
   const anomalyDay = end - 9 * DAY;
   push('CB LE GRAND RESTAURANT', -184.5, anomalyDay, 'restaurant');
-  push('CB APPLE STORE', -1249, end - 46 * DAY, 'shopping');
+  push('CB APPLE STORE', -1249, end - 214 * DAY, 'shopping');
   push('VIR RECU PRIME ANNUELLE', 1200, end - 74 * DAY, 'salaire');
   push('CB KRAKEN ACHAT BTC', -500, end - 21 * DAY, 'investissement');
   push('CB KRAKEN ACHAT BTC', -500, end - 52 * DAY, 'investissement');

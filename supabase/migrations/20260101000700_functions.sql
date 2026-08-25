@@ -207,22 +207,32 @@ $$;
 grant execute on function public.set_transaction_status(uuid, text) to authenticated;
 
 -- ---------------------------------------------------------------------------
--- monthly_summary : revenus / dépenses / épargne d'un mois (§21, §22)
---   Les transactions 'ignored' et 'hidden' sont exclues, les transferts aussi
---   (un virement entre mes comptes n'est ni un revenu ni une dépense).
+-- monthly_summary : revenus / dépenses / investissements / épargne (§21, §22)
+--
+--   Trois exclusions, chacune pour une raison :
+--     · status ignored/hidden  → l'utilisateur a demandé à ne pas les compter
+--     · catégories 'transfer'  → un virement entre MES comptes n'est ni un
+--                                revenu ni une dépense
+--     · catégories 'investment'→ acheter du Bitcoin, ce n'est pas consommer :
+--                                c'est déplacer de l'épargne. Le compter en
+--                                dépense ferait chuter le taux d'épargne alors
+--                                que le patrimoine, lui, ne bouge pas.
+--   Les investissements sont donc retournés à part, comme sur l'écran de
+--   référence qui distingue Revenus / Dépenses / Investissements.
 -- ---------------------------------------------------------------------------
 create or replace function public.monthly_summary(p_month date default date_trunc('month', current_date)::date)
 returns table (
   month          date,
   income         numeric,
   expense        numeric,
+  invested       numeric,
   net_savings    numeric,
   savings_rate   numeric,
   tx_count       int
 )
 language sql stable security invoker set search_path = public as $$
   with base as (
-    select t.amount, c.kind as cat_kind
+    select t.amount, coalesce(c.kind, 'expense') as cat_kind
       from public.bank_transactions t
       left join public.categories c on c.id = t.category_id
      where t.user_id = auth.uid()
@@ -232,8 +242,9 @@ language sql stable security invoker set search_path = public as $$
        and coalesce(c.kind, 'expense') <> 'transfer'
   ), agg as (
     select
-      coalesce(sum(amount) filter (where amount > 0), 0) as income,
-      coalesce(-sum(amount) filter (where amount < 0), 0) as expense,
+      coalesce(sum(amount) filter (where amount > 0 and cat_kind <> 'investment'), 0) as income,
+      coalesce(-sum(amount) filter (where amount < 0 and cat_kind <> 'investment'), 0) as expense,
+      coalesce(-sum(amount) filter (where amount < 0 and cat_kind =  'investment'), 0) as invested,
       count(*)::int as n
     from base
   )
@@ -241,6 +252,7 @@ language sql stable security invoker set search_path = public as $$
     date_trunc('month', p_month)::date,
     agg.income,
     agg.expense,
+    agg.invested,
     agg.income - agg.expense,
     case when agg.income > 0
          then round(((agg.income - agg.expense) / agg.income) * 100, 2)
@@ -275,7 +287,7 @@ language sql stable security invoker set search_path = public as $$
        and t.status = 'active'
        and t.booked_at >= date_trunc('month', p_month)::date
        and t.booked_at <  (date_trunc('month', p_month) + interval '1 month')::date
-       and coalesce(c.kind,'expense') <> 'transfer'
+       and coalesce(c.kind,'expense') not in ('transfer','investment')
        and case when p_kind = 'expense' then t.amount < 0 else t.amount > 0 end
   ), agg as (
     select cid, slug, label, emoji, color, sum(amt) as total, count(*)::int as n

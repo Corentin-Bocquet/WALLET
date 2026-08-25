@@ -217,6 +217,7 @@ begin
   assert r.expense = 492.00, format('dépenses=%s', r.expense);
   assert r.net_savings = 2008.00, format('épargne=%s', r.net_savings);
   assert r.savings_rate = 80.32, format('taux=%s', r.savings_rate);
+  assert r.invested = 0, format('aucun investissement en février (%s)', r.invested);
 end $$;
 
 do $$
@@ -225,6 +226,26 @@ begin
   -- Mois sans revenu connu : le taux doit être NULL, jamais 0 (§46)
   select * into r from public.monthly_summary(date '2026-01-01');
   assert r.savings_rate is null, 'un taux inconnu doit être null, pas 0';
+end $$;
+
+-- Un achat d'actif n'est pas une dépense (§22) --------------------------------
+insert into public.bank_transactions
+  (user_id, account_id, booked_at, amount, raw_label, clean_label, category_id,
+   category_source, fingerprint)
+select '33333333-3333-3333-3333-333333333333','aaaaaaaa-0000-0000-0000-000000000001',
+       date '2026-02-15', -500.00, 'CB KRAKEN ACHAT BTC', 'kraken achat btc', c.id, 'rule', 'fp-kraken'
+  from public.categories c
+ where c.user_id='33333333-3333-3333-3333-333333333333' and c.slug='investissement';
+
+do $$
+declare r record;
+begin
+  select * into r from public.monthly_summary(date '2026-02-01');
+  assert r.invested = 500.00, format('investi=%s', r.invested);
+  assert r.expense = 492.00,
+    format('acheter du BTC ne doit pas gonfler les dépenses (dépenses=%s)', r.expense);
+  assert r.savings_rate = 80.32,
+    format('le taux d''épargne ne doit pas chuter à cause d''un investissement (%s)', r.savings_rate);
 end $$;
 
 -- Répartition par catégorie ---------------------------------------------------
