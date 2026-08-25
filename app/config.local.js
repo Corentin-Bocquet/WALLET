@@ -1,24 +1,13 @@
 /**
- * WALLET · Configuration locale (facultative)
+ * WALLET · Configuration du serveur
  *
- * Deux façons de connecter votre projet Supabase :
- *
- *   1. depuis l'application, écran de connexion → « Connecter mon serveur ».
- *      C'est la voie normale : rien à modifier ici, tout se fait au doigt
- *      depuis l'iPhone.
- *
- *   2. en renseignant les deux valeurs ci-dessous, si vous préférez que
- *      l'application arrive déjà configurée (utile pour un déploiement).
- *
- * La clé « anon » est PUBLIQUE par conception : elle ne donne accès à rien
- * sans authentification, et la Row Level Security fait le reste. N'écrivez
- * JAMAIS la clé « service_role » ici : elle contourne toutes les sécurités.
- *
- * Ce fichier est versionné volontairement (vide), pour qu'aucune requête 404
- * ne ralentisse le démarrage de l'application.
+ * Ces deux valeurs pointent vers le projet Supabase "WALLET".
+ * La cle "anon" est PUBLIQUE par conception : elle ne donne acces a rien sans
+ * authentification, c'est la Row Level Security qui protege les donnees.
+ * Ne mettez JAMAIS la cle "service_role" ici.
  */
 
-// window.WALLET_CONFIG = {
-//   supabaseUrl: 'https://votreprojet.supabase.co',
-//   supabaseAnonKey: 'eyJhbGciOi…',
-// };
+window.WALLET_CONFIG = {
+  supabaseUrl: 'https://qjxeimsinxqvlodsusww.supabase.co',
+  supabaseAnonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFqeGVpbXNpbnhxdmxvZHN1c3d3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc2NzY1NzksImV4cCI6MjEwMzI1MjU3OX0.I9igzeqpZlmMryY8qh4ttuXT8OflBP2rVhBy6LFJ6RQ',
+};
