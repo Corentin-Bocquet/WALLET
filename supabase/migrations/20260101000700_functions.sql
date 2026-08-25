@@ -20,16 +20,25 @@ $$;
 -- ---------------------------------------------------------------------------
 create or replace function public.normalize_label(raw text)
 returns text language sql immutable as $$
-  select nullif(trim(regexp_replace(
+  select nullif(trim(
+    -- 5. les espaces multiples deviennent un seul espace : indispensable pour
+    --    que la clé de mémoire soit identique côté client (engine/normalize.js)
     regexp_replace(
+      -- 4. ponctuation et symboles
       regexp_replace(
+        -- 3. longues suites de chiffres (numéros de mandat, de carte…)
         regexp_replace(
-          lower(coalesce(unaccent_fallback(raw), '')),
-          '\y(cb|carte|paiement|prlv|prelevement|vir|virement|sepa|inst|achat|retrait|facture|ref|mandat|echeance)\y',
-          ' ', 'g'),
-        '[0-9]{2}[/.\-][0-9]{2}([/.\-][0-9]{2,4})?', ' ', 'g'),
-      '[0-9]{4,}', ' ', 'g'),
-    '[^a-z0-9 ]+', ' ', 'g')), '');
+          -- 2. dates jj/mm ou jj/mm/aaaa
+          regexp_replace(
+            -- 1. mots de bruit propres aux libellés bancaires
+            regexp_replace(
+              lower(coalesce(unaccent_fallback(raw), '')),
+              '\y(cb|carte|paiement|prlv|prelevement|vir|virement|sepa|inst|achat|retrait|facture|ref|mandat|echeance)\y',
+              ' ', 'g'),
+            '[0-9]{2}[/.\-][0-9]{2}([/.\-][0-9]{2,4})?', ' ', 'g'),
+          '[0-9]{4,}', ' ', 'g'),
+        '[^a-z0-9 ]+', ' ', 'g'),
+      '\s+', ' ', 'g')), '');
 $$;
 
 -- ---------------------------------------------------------------------------
