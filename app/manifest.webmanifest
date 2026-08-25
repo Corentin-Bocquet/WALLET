@@ -2,7 +2,6 @@
   "name": "WALLET — Patrimoine & Banque",
   "short_name": "WALLET",
   "description": "Votre patrimoine, vos cryptos et vos comptes, expliqués simplement.",
-  "id": "/wallet/",
   "start_url": "./index.html",
   "scope": "./",
   "display": "standalone",

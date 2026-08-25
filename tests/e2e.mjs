@@ -198,7 +198,26 @@ assert.equal(blurState, 'on');
 step('montants masqués ✓');
 
 /* ---------------------------------------------------------------- */
-console.log('\n9. Aucune erreur console sur l’ensemble du parcours');
+console.log('\n9. Service worker : PWA installable et mode hors connexion');
+await go('/');
+// `boot()` est asynchrone : si l'enregistrement attendait l'événement `load`,
+// celui-ci serait déjà passé et le service worker ne s'enregistrerait jamais.
+const registration = await page.evaluate(async () => {
+  const r = await Promise.race([
+    navigator.serviceWorker.ready,
+    new Promise((resolve) => setTimeout(() => resolve(null), 8000)),
+  ]).catch(() => null);
+  return r ? { scope: r.scope, script: r.active?.scriptURL ?? '' } : null;
+});
+assert.ok(registration, 'le service worker ne s’est pas enregistré');
+assert.ok(registration.script.endsWith('/sw.js'), `script inattendu : ${registration.script}`);
+assert.ok(BASE.startsWith(registration.scope.replace(/\/$/, ''))
+  || registration.scope.startsWith(BASE),
+  `portée inattendue : ${registration.scope}`);
+step(`enregistré, portée ${registration.scope} ✓`);
+
+/* ---------------------------------------------------------------- */
+console.log('\n10. Aucune erreur console sur l’ensemble du parcours');
 const real = [...new Set(errors)].filter((e) => !/favicon/i.test(e));
 if (real.length) {
   console.log(real.join('\n'));

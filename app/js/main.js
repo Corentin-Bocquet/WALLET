@@ -174,7 +174,16 @@ function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   if (location.protocol === 'file:') return;
 
-  window.addEventListener('load', () => {
+  // L'enregistrement est repoussé après le chargement pour ne pas concurrencer
+  // le premier rendu. Mais `boot()` est asynchrone : le temps qu'il choisisse
+  // le backend et vérifie la session, l'événement `load` est souvent DÉJÀ
+  // passé — et un écouteur ajouté après coup ne se déclenche jamais. Sans ce
+  // test, le service worker n'était plus enregistré du tout : ni mode hors
+  // connexion, ni installation sur l'écran d'accueil.
+  if (document.readyState === 'complete') queueMicrotask(register);
+  else window.addEventListener('load', register, { once: true });
+
+  function register() {
     navigator.serviceWorker.register(new URL('../sw.js', import.meta.url), { scope: './' })
       .then((registration) => {
         registration.addEventListener('updatefound', () => {
@@ -194,7 +203,7 @@ function registerServiceWorker() {
         });
       })
       .catch((error) => console.warn('[wallet] service worker non enregistré', error));
-  });
+  }
 }
 
 /* — Connexion ————————————————————————————————————— */
