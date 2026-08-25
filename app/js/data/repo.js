@@ -277,8 +277,39 @@ export const forgetMemory = async (key, bucket) => {
   return backend.forgetMemory(key, bucket);
 };
 
-export const listRecurring = () => cached('recurring', 5 * MIN, () => backend.listRecurring());
-export const listAnomalies = () => cached('anomalies', 5 * MIN, () => backend.listAnomalies?.() ?? []);
+/**
+ * Récurrences.
+ *
+ * Sur un vrai serveur, la table peut être vide au premier passage : rien ne
+ * l'alimente automatiquement. On lance alors la détection une fois, sur
+ * l'historique disponible, et on enregistre le résultat. Sans ce déclencheur,
+ * l'écran « Paiements récurrents » resterait vide indéfiniment alors que les
+ * données nécessaires sont là.
+ */
+export const listRecurring = () => cached('recurring', 5 * MIN, async () => {
+  const existing = await backend.listRecurring();
+  if (existing.length || !backend.refreshRecurring) return existing;
+
+  const transactions = await backend.listTransactions({ status: 'active', limit: 2000 })
+    .catch(() => []);
+  if (transactions.length < 10) return existing;
+
+  const { detectRecurring } = await import('../engine/recurring.js');
+  const detected = detectRecurring(transactions);
+  if (!detected.length) return existing;
+
+  return backend.refreshRecurring(detected).catch(() => existing);
+});
+
+export const listAnomalies = () =>
+  cached('anomalies', 5 * MIN, () => backend.listAnomalies?.() ?? []);
+
+/** Force un nouveau calcul des récurrences, depuis l'écran dédié. */
+export async function refreshRecurring() {
+  invalidate('recurring');
+  invalidate('anomalies');
+  return listRecurring();
+}
 export const listImportBatches = () => backend.listImportBatches?.() ?? [];
 export const importTransactions = async (rows, batch) => {
   invalidate('tx:'); invalidate('summary'); invalidate('recurring');

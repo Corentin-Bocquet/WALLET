@@ -437,6 +437,85 @@ export const supabaseBackend = {
       .order('average_amount', { ascending: false }), 'recurring') || [];
   },
 
+  /**
+   * Recalcule les récurrences à partir de l'historique et les enregistre.
+   *
+   * La détection tourne côté client parce que le moteur est le même que celui
+   * de la démonstration — un seul code, un seul comportement. Le résultat est
+   * persisté pour que les autres écrans, et les alertes côté serveur, y aient
+   * accès sans tout recalculer.
+   */
+  async refreshRecurring(transactions) {
+    const sb = await getClient();
+    const { data: { user } } = await sb.auth.getUser();
+
+    const rows = (transactions || []).map((r) => ({
+      user_id: user.id,
+      account_id: r.account_id ?? null,
+      label: r.label,
+      merchant: r.merchant,
+      category_id: r.category_id ?? null,
+      kind: r.kind,
+      cadence: r.cadence,
+      average_amount: r.average_amount,
+      last_amount: r.last_amount,
+      amount_variance: r.amount_variance,
+      occurrences: r.occurrences,
+      first_seen: r.first_seen,
+      last_seen: r.last_seen,
+      next_expected: r.next_expected,
+      confidence: r.confidence,
+      is_active: r.is_active,
+      signature: r.signature,
+    }));
+    if (!rows.length) return [];
+
+    const saved = unwrap(await sb.from('recurring_transactions')
+      .upsert(rows, { onConflict: 'user_id,signature' })
+      .select('id, signature'), 'saveRecurring') || [];
+
+    // Rattacher chaque transaction à sa récurrence. C'est ce lien qui évite
+    // qu'un loyer soit ensuite signalé comme dépense inhabituelle.
+    const bySignature = new Map(saved.map((r) => [r.signature, r.id]));
+    for (const detected of transactions) {
+      const id = bySignature.get(detected.signature);
+      if (!id || !detected.transaction_ids?.length) continue;
+      await sb.from('bank_transactions')
+        .update({ recurring_id: id })
+        .in('id', detected.transaction_ids);
+    }
+
+    return this.listRecurring();
+  },
+
+  /**
+   * Anomalies. Le calcul est fait par la base (`refresh_my_anomalies`), qui
+   * applique exactement la même logique que le moteur JavaScript — comparaison
+   * au marchand d'abord, à la catégorie ensuite. Le faire côté serveur permet
+   * aux alertes de fonctionner application fermée.
+   */
+  async listAnomalies() {
+    const sb = await getClient();
+    await sb.rpc('refresh_my_anomalies').catch(() => {});
+
+    const rows = unwrap(await sb.from('bank_transactions')
+      .select('id, booked_at, amount, merchant, clean_label, raw_label, category_id, anomaly_score')
+      .eq('is_anomaly', true)
+      .order('anomaly_score', { ascending: false })
+      .limit(30), 'anomalies') || [];
+
+    return rows.map((row) => ({
+      transaction_id: row.id,
+      category_id: row.category_id,
+      amount: Math.abs(Number(row.amount)),
+      score: Number(row.anomaly_score),
+      booked_at: row.booked_at,
+      label: row.merchant || row.clean_label || row.raw_label,
+      basis: 'serveur',
+      explanation: `${formatEuro(Math.abs(Number(row.amount)))} : nettement au-dessus de vos dépenses habituelles pour ce marchand.`,
+    }));
+  },
+
   async saveRecurring(rows) {
     const sb = await getClient();
     const { data: { user } } = await sb.auth.getUser();
@@ -680,6 +759,10 @@ export const supabaseBackend = {
     return rows.reverse();
   },
 };
+
+const formatEuro = (value) => new Intl.NumberFormat('fr-FR', {
+  style: 'currency', currency: 'EUR', maximumFractionDigits: 2,
+}).format(value);
 
 function flattenQuote(row) {
   if (!row) return null;

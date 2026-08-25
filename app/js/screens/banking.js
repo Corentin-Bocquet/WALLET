@@ -598,7 +598,26 @@ export async function toClassifyScreen() {
 
 export async function recurringScreen() {
   const screen = h('main.screen');
-  screen.append(subScreenHead('Paiements récurrents'));
+
+  screen.append(subScreenHead('Paiements récurrents', {
+    right: h('button.icon-btn', {
+      type: 'button', 'aria-label': 'Recalculer', 'data-sound': 'select',
+      onclick: async (event) => {
+        const button = event.currentTarget;
+        button.textContent = '…';
+        button.disabled = true;
+        try {
+          await repo.refreshRecurring();
+          toast('Récurrences recalculées', { kind: 'success' });
+          setTimeout(() => window.location.reload(), 500);
+        } catch (error) {
+          toast(error.message, { kind: 'error' });
+          button.textContent = '⟳';
+          button.disabled = false;
+        }
+      },
+    }, '⟳'),
+  }));
 
   const body = h('div');
   screen.append(body);
