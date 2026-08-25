@@ -17,15 +17,23 @@ import { toast } from './lib/toast.js';
 import { config, isConfigured } from './config.js';
 import * as repo from './data/repo.js';
 
-import { homeScreen } from './screens/home.js';
-import { marketsScreen, assetScreen } from './screens/markets.js';
-import { portfolioScreen } from './screens/portfolio.js';
-import { opportunitiesScreen } from './screens/opportunities.js';
-import { profileScreen, engineScreen, categoriesScreen } from './screens/profile.js';
-import { bankingScreen, toClassifyScreen, recurringScreen, rulesScreen } from './screens/banking.js';
-import { accountsScreen } from './screens/accounts.js';
-import { alertsScreen, goalsScreen } from './screens/alerts.js';
 import { authScreen } from './screens/auth.js';
+
+/**
+ * Les écrans sont chargés à la demande.
+ *
+ * Sans cela, ouvrir l'accueil télécharge aussi le portefeuille, les marchés,
+ * les opportunités, le profil, la banque, les comptes et les alertes — soit
+ * plus du double du code nécessaire au premier affichage. Sur un iPhone en 4G,
+ * c'est la différence entre une ouverture immédiate et une attente.
+ *
+ * Chaque module n'est chargé qu'une fois ; le navigateur le met ensuite en
+ * cache, et le service worker le conserve hors connexion.
+ */
+const lazy = (loader, name) => async (context) => {
+  const module = await loader();
+  return module[name](context);
+};
 
 const root = document.getElementById('app');
 
@@ -120,26 +128,45 @@ async function applySettings() {
 /* — Routes ————————————————————————————————————————— */
 
 function installRoutes() {
-  defineRoute('/', homeScreen);
+  const home = () => import('./screens/home.js');
+  const markets = () => import('./screens/markets.js');
+  const portfolio = () => import('./screens/portfolio.js');
+  const opportunities = () => import('./screens/opportunities.js');
+  const banking = () => import('./screens/banking.js');
+  const profile = () => import('./screens/profile.js');
+  const accounts = () => import('./screens/accounts.js');
+  const alerts = () => import('./screens/alerts.js');
 
-  defineRoute('/marches', marketsScreen);
-  defineRoute('/marches/:id', assetScreen);
+  defineRoute('/', lazy(home, 'homeScreen'));
 
-  defineRoute('/portefeuille', portfolioScreen);
-  defineRoute('/opportunites', opportunitiesScreen);
+  defineRoute('/marches', lazy(markets, 'marketsScreen'));
+  defineRoute('/marches/:id', lazy(markets, 'assetScreen'));
 
-  defineRoute('/banque', bankingScreen);
-  defineRoute('/banque/a-classer', toClassifyScreen);
-  defineRoute('/banque/recurrent', recurringScreen);
-  defineRoute('/banque/regles', rulesScreen);
+  defineRoute('/portefeuille', lazy(portfolio, 'portfolioScreen'));
+  defineRoute('/opportunites', lazy(opportunities, 'opportunitiesScreen'));
 
-  defineRoute('/profil', profileScreen);
-  defineRoute('/profil/comptes', accountsScreen);
-  defineRoute('/profil/categories', categoriesScreen);
-  defineRoute('/profil/moteur', engineScreen);
-  defineRoute('/profil/alertes', alertsScreen);
-  defineRoute('/profil/objectifs', goalsScreen);
+  defineRoute('/banque', lazy(banking, 'bankingScreen'));
+  defineRoute('/banque/a-classer', lazy(banking, 'toClassifyScreen'));
+  defineRoute('/banque/recurrent', lazy(banking, 'recurringScreen'));
+  defineRoute('/banque/regles', lazy(banking, 'rulesScreen'));
+
+  defineRoute('/profil', lazy(profile, 'profileScreen'));
+  defineRoute('/profil/comptes', lazy(accounts, 'accountsScreen'));
+  defineRoute('/profil/categories', lazy(profile, 'categoriesScreen'));
+  defineRoute('/profil/moteur', lazy(profile, 'engineScreen'));
+  defineRoute('/profil/alertes', lazy(alerts, 'alertsScreen'));
+  defineRoute('/profil/objectifs', lazy(alerts, 'goalsScreen'));
+
+  // Les écrans voisins sont préchargés une fois l'accueil affiché : la
+  // navigation reste instantanée, sans peser sur le premier rendu.
+  window.addEventListener('wallet:navigated', function preload() {
+    window.removeEventListener('wallet:navigated', preload);
+    requestIdleCallbackShim(() => { markets(); portfolio(); banking(); });
+  });
 }
+
+const requestIdleCallbackShim = (fn) =>
+  (window.requestIdleCallback ?? ((cb) => setTimeout(cb, 800)))(fn);
 
 /* — Service worker ————————————————————————————————— */
 

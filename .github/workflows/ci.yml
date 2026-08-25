@@ -59,6 +59,12 @@ jobs:
           export PGHOST=/var/tmp PGPORT=55432
           node --test tests/glossary.test.js
 
+      # --- Les sons optimisés ne doivent pas avoir perdu de niveau -------
+      - name: Sons d'interface
+        run: node scripts/check-sounds.mjs
+        continue-on-error: true   # sans historique git complet, la comparaison
+                                  # à la version d'origine n'est pas possible
+
       # --- Parcours réel dans un navigateur ------------------------------
       # Vérifie ce qu'aucun test unitaire ne peut vérifier : qu'une correction
       # de catégorie faite au doigt survit à un rechargement complet.

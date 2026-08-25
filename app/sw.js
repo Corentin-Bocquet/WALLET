@@ -27,6 +27,20 @@ const SHELL_ASSETS = [
   './css/components.css',
   './js/main.js',
   './js/config.js',
+  // Les écrans sont chargés à la demande par le routeur ; on les met malgré
+  // tout dans la coquille, sinon un premier lancement hors connexion
+  // n'afficherait que l'accueil.
+  './js/screens/home.js',
+  './js/screens/markets.js',
+  './js/screens/portfolio.js',
+  './js/screens/opportunities.js',
+  './js/screens/profile.js',
+  './js/screens/banking.js',
+  './js/screens/accounts.js',
+  './js/screens/alerts.js',
+  './js/screens/assistant.js',
+  './js/data/repo.js',
+  './js/data/glossary.js',
   './icons/icon.svg',
   './icons/icon-180.png',
   './icons/icon-192.png',

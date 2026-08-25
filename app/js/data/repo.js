@@ -12,26 +12,46 @@
  */
 
 import { config, isConfigured } from '../config.js';
-import { demoBackend, resetDemo } from './demoStore.js';
 
-let backend = demoBackend;
+/**
+ * Le backend est choisi au démarrage et chargé DYNAMIQUEMENT.
+ *
+ * Le jeu de démonstration et son générateur pèsent lourd et ne servent à rien
+ * quand un vrai serveur est configuré ; inversement, la bibliothèque Supabase
+ * ne sert à rien en démonstration. Les importer statiquement obligerait à
+ * télécharger les deux dans tous les cas.
+ */
+let backend = null;
 let ready = false;
 
 export async function initBackend() {
   if (ready) return backend;
+
   if (isConfigured()) {
     const { supabaseBackend } = await import('./supabaseBackend.js');
     backend = supabaseBackend;
   } else {
+    const { demoBackend } = await import('./demoStore.js');
     backend = demoBackend;
   }
+
   ready = true;
   return backend;
 }
 
-export const backendMode = () => backend.mode;
-export const isDemoMode = () => backend.mode === 'demo';
-export { resetDemo };
+const requireBackend = () => {
+  if (!backend) throw new Error('initBackend() doit être appelé avant toute requête.');
+  return backend;
+};
+
+export const backendMode = () => backend?.mode ?? null;
+export const isDemoMode = () => backend?.mode === 'demo';
+
+/** Réinitialise le jeu de démonstration (sans effet en mode connecté). */
+export async function resetDemo() {
+  const module = await import('./demoStore.js');
+  return module.resetDemo();
+}
 
 /* ================================================================== */
 /* Cache mémoire à durée de vie courte                                 */
@@ -400,7 +420,6 @@ export const listAssistantHistory = () => backend.listAssistantHistory?.() ?? []
 /* Glossaire                                                           */
 /* ================================================================== */
 
-import { GLOSSARY_FALLBACK } from './glossary.js';
 
 /**
  * Les explications sont d'abord cherchées en base (elles peuvent y être
@@ -408,8 +427,12 @@ import { GLOSSARY_FALLBACK } from './glossary.js';
  * s'ouvrir même hors connexion et même en mode démonstration.
  */
 export async function getGlossary(code) {
+  // Le glossaire embarqué contient une douzaine d'explications longues : il
+  // n'est chargé qu'à la première ouverture d'une explication.
+  const { GLOSSARY_FALLBACK } = await import('./glossary.js');
   const local = GLOSSARY_FALLBACK[code] ?? null;
-  if (!backend.getGlossary) return local;
+
+  if (!backend?.getGlossary) return local;
   try {
     const remote = await cached(`glossary:${code}`, 60 * MIN, () => backend.getGlossary(code));
     return remote ?? local;

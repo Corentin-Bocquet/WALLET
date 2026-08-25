@@ -161,3 +161,37 @@ au milieu d'une saisie serait hostile.
 
 Deux copies écrites à la main divergent toujours. Un test vérifie d'ailleurs
 que le glossaire embarqué correspond bien au SQL.
+
+---
+
+## Optimisation
+
+Deux mesures, prises après avoir mesuré plutôt qu'avant.
+
+**Les écrans sont chargés à la demande.** `main.js` n'importe plus les onze
+écrans statiquement : le routeur les charge par `import()` dynamique. L'accueil
+demandait 341 Ko de JavaScript, il en demande 256 avant d'afficher le premier
+chiffre. Les trois écrans les plus visités sont préchargés ensuite, pendant
+l'inactivité, pour que la navigation reste instantanée.
+
+Même logique pour les deux backends : le jeu de démonstration ne se charge pas
+quand un serveur est configuré, et la bibliothèque Supabase ne se charge pas en
+démonstration. Le glossaire, qui contient une douzaine d'explications longues,
+n'arrive qu'à la première ouverture d'une explication.
+
+**Les sons sont passés en mono 22 kHz** — 2,8 Mo à 614 Ko, soit 78 % de moins.
+Pour des clics de quelques dizaines de millisecondes joués au haut-parleur d'un
+téléphone, la stéréo n'apporte rien et 22 kHz couvre le spectre utile.
+
+Le script de conversion (`scripts/optimize-sounds.mjs`) a révélé deux pièges
+qu'un simple `ffmpeg -ac 1` aurait laissé passer :
+
+- Un des sons a ses **deux canaux en opposition de phase**. Le mixage mono les
+  annulait : sa crête tombait de 0,996 à 0,057, c'est-à-dire un son inaudible.
+  Le convertisseur détecte le cas et bascule sur un seul canal.
+- Le filtre passe-bas qui précède la décimation **arrondit les transitoires**,
+  donc baisse la sonie. Le convertisseur réaligne le niveau efficace (RMS) sur
+  l'original, avec une limite pour ne jamais écrêter.
+
+`scripts/check-sounds.mjs` vérifie que sonie et durée sont préservées sur les
+onze fichiers, en comparant à la version d'origine conservée dans git.
