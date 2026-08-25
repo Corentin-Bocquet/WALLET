@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="fr" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <title>WALLET</title>
+
+  <!-- viewport-fit=cover : indispensable pour que les safe-areas iPhone
+       (encoche, barre d'accueil) soient exploitables en CSS. -->
+  <meta name="viewport"
+        content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5">
+
+  <meta name="description" content="Patrimoine, crypto et banque personnelle, en un seul écran.">
+  <meta name="theme-color" content="#000000">
+  <meta name="color-scheme" content="dark light">
+
+  <!-- Comportement d'app installée sur iPhone -->
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="WALLET">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="format-detection" content="telephone=no">
+
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="icon" href="./icons/icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="./icons/icon-180.png">
+
+  <!-- Écrans de lancement iOS. Safari exige un media query exact par appareil ;
+       sans eux, l'app installée démarre sur un écran blanc. -->
+  <link rel="apple-touch-startup-image" href="./icons/splash-iphone-15-pro-max.png"
+        media="(device-width: 430px) and (device-height: 932px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image" href="./icons/splash-iphone-15.png"
+        media="(device-width: 393px) and (device-height: 852px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image" href="./icons/splash-iphone-13.png"
+        media="(device-width: 390px) and (device-height: 844px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image" href="./icons/splash-iphone-x.png"
+        media="(device-width: 375px) and (device-height: 812px) and (-webkit-device-pixel-ratio: 3)">
+  <link rel="apple-touch-startup-image" href="./icons/splash-iphone-xr.png"
+        media="(device-width: 414px) and (device-height: 896px) and (-webkit-device-pixel-ratio: 2)">
+
+  <link rel="stylesheet" href="./css/tokens.css">
+  <link rel="stylesheet" href="./css/base.css">
+  <link rel="stylesheet" href="./css/components.css">
+
+  <!-- Configuration locale, ignorée par git. Absente en général : l'écran de
+       connexion permet de saisir l'URL du serveur depuis le téléphone. -->
+  <script src="./config.local.js" onerror="void 0"></script>
+</head>
+<body data-blur="off">
+  <div id="app">
+    <!-- Écran d'attente : sans lui, on voit un fond noir vide le temps que
+         les modules se chargent, ce qui donne l'impression d'un plantage. -->
+    <div class="screen" style="display:grid;place-items:center;min-height:100dvh">
+      <div style="text-align:center">
+        <div style="font-size:48px;margin-bottom:10px">◈</div>
+        <div style="font-weight:700;letter-spacing:-.02em">WALLET</div>
+        <noscript>
+          <p style="color:#A1A1A6;margin-top:16px;max-width:280px">
+            WALLET a besoin de JavaScript pour calculer vos indicateurs
+            directement sur votre appareil.
+          </p>
+        </noscript>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="./js/main.js"></script>
+</body>
+</html>

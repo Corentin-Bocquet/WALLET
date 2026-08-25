@@ -1,0 +1,42 @@
+name: Synchronisation planifiée
+
+# Remplace un planificateur payant : GitHub Actions offre 2 000 minutes par
+# mois sur un dépôt privé, illimité sur un dépôt public. Ces appels durent
+# quelques secondes.
+on:
+  schedule:
+    # Marché : toutes les 2 heures. Suffisant pour un suivi de patrimoine,
+    # et très en dessous des quotas gratuits de CoinGecko.
+    - cron: '7 */2 * * *'
+    # Instantané du patrimoine et alertes : une fois par jour, le soir.
+    - cron: '17 21 * * *'
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rafraîchir le marché
+        run: |
+          if [ -z "${{ secrets.SUPABASE_FUNCTIONS_URL }}" ]; then
+            echo "Aucun projet Supabase configuré — rien à faire."
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Content-Type: application/json" \
+            "${{ secrets.SUPABASE_FUNCTIONS_URL }}/market-sync" \
+            | head -c 500
+          echo
+
+      - name: Instantané du patrimoine et alertes
+        if: github.event.schedule == '17 21 * * *' || github.event_name == 'workflow_dispatch'
+        run: |
+          if [ -z "${{ secrets.SUPABASE_FUNCTIONS_URL }}" ]; then exit 0; fi
+          for fn in portfolio-snapshot alerts-run; do
+            curl -fsS -X POST \
+              -H "Content-Type: application/json" \
+              -H "x-cron-secret: ${{ secrets.CRON_SECRET }}" \
+              "${{ secrets.SUPABASE_FUNCTIONS_URL }}/$fn?cron=1" \
+              | head -c 500
+            echo
+          done

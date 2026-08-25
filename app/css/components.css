@@ -1,0 +1,487 @@
+/* ==========================================================================
+   WALLET · Composants
+   ========================================================================== */
+
+/* — Carte —————————————————————————————————————————— */
+.card {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: var(--sp-5);
+}
+.card--tap { transition: transform var(--dur-fast) var(--ease), background var(--dur-fast); }
+.card--tap:active { transform: scale(.982); background: var(--surface-2); }
+.card--flat { background: transparent; padding-inline: 0; }
+
+.tile {
+  background: var(--surface);
+  border-radius: var(--r-lg);
+  padding: var(--sp-4);
+  min-width: 140px;
+  min-height: 116px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: var(--sp-3);
+}
+.tile__label { color: var(--text-2); font-size: var(--fs-body); font-weight: 500; }
+.tile__value { font-weight: 700; letter-spacing: var(--tracking-title); }
+
+/* — Boutons ————————————————————————————————————————— */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  min-height: 52px;
+  padding: 0 var(--sp-6);
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  font-size: var(--fs-body);
+  background: var(--surface-2);
+  color: var(--text);
+  transition: transform var(--dur-fast) var(--ease), opacity var(--dur-fast);
+}
+.btn:active { transform: scale(.96); }
+.btn:disabled { opacity: .4; pointer-events: none; }
+
+.btn--primary   { background: var(--accent); color: var(--text-on-accent); }
+.btn--secondary { background: var(--accent-dim); color: var(--accent); }
+.btn--ghost     { background: transparent; color: var(--text-2); }
+.btn--danger    { background: color-mix(in srgb, var(--down) 18%, transparent); color: var(--down); }
+.btn--block     { width: 100%; }
+.btn--sm        { min-height: 40px; padding: 0 var(--sp-4); font-size: var(--fs-sm); }
+
+/* Barre d'actions flottante, comme sur les références */
+.dock-actions {
+  position: fixed;
+  left: calc(var(--gutter) + var(--safe-left));
+  right: calc(var(--gutter) + var(--safe-right));
+  bottom: calc(var(--dock-h) + var(--safe-bottom) + var(--sp-3));
+  display: flex;
+  gap: var(--sp-3);
+  max-width: 680px;
+  margin-inline: auto;
+  z-index: 40;
+  pointer-events: none;
+}
+.dock-actions > * { flex: 1; pointer-events: auto; box-shadow: 0 8px 32px rgba(0,0,0,.5); }
+
+/* — Icône ronde ————————————————————————————————————— */
+.icon-btn {
+  width: 40px; height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  display: grid; place-items: center;
+  color: var(--text);
+  transition: transform var(--dur-fast) var(--ease);
+  flex: 0 0 auto;
+}
+.icon-btn:active { transform: scale(.9); }
+.icon-btn--lg { width: 56px; height: 56px; }
+.icon-btn--plain { background: transparent; }
+
+.action-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--sp-3);
+  text-align: center;
+}
+.action-grid button { display: grid; justify-items: center; gap: var(--sp-2); }
+.action-grid span { font-size: var(--fs-sm); color: var(--text-2); }
+
+/* — Segmenté (Simple / Échange) ————————————————————— */
+.segmented {
+  display: inline-flex;
+  background: var(--surface);
+  border-radius: var(--r-pill);
+  padding: 3px;
+  gap: 2px;
+}
+.segmented button {
+  padding: 8px var(--sp-4);
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast);
+  white-space: nowrap;
+}
+.segmented button[aria-selected="true"] { background: var(--surface-3); color: var(--text); }
+
+/* Onglets défilants (Liste d'alerte / Toutes les cryptos …) */
+.tabs {
+  display: flex;
+  gap: var(--sp-2);
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin-inline: calc(-1 * var(--gutter));
+  padding-inline: var(--gutter);
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tabs button {
+  flex: 0 0 auto;
+  padding: 10px var(--sp-4);
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+  font-weight: 600;
+  font-size: var(--fs-sm);
+  transition: background var(--dur-fast), color var(--dur-fast);
+}
+.tabs button[aria-selected="true"] { background: var(--surface); color: var(--text); }
+
+/* — Lignes de liste ————————————————————————————————— */
+.rows { display: flex; flex-direction: column; }
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-3) 0;
+  min-height: 60px;
+  text-align: left;
+  width: 100%;
+  transition: opacity var(--dur-fast);
+}
+.row:active { opacity: .6; }
+.row + .row { border-top: 1px solid var(--hairline); }
+.row__main   { min-width: 0; }
+.row__title  { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row__sub    { color: var(--text-2); font-size: var(--fs-sm);
+               overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.row__end    { text-align: right; display: grid; gap: 2px; justify-items: end; }
+.row__value  { font-weight: 600; font-variant-numeric: tabular-nums; }
+.row--ghost  { opacity: .45; }
+
+.avatar {
+  width: 40px; height: 40px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  display: grid; place-items: center;
+  font-size: 20px;
+  overflow: hidden;
+  flex: 0 0 auto;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+.avatar--dot { width: 12px; height: 12px; }
+
+/* — Puce d'explication ⓘ (§6) ————————————————————— */
+.info-chip {
+  width: 20px; height: 20px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  transition: transform var(--dur-fast) var(--ease), background var(--dur-fast);
+  vertical-align: middle;
+}
+.info-chip:active { transform: scale(.85); background: var(--surface-3); }
+
+/* — Badges ————————————————————————————————————————— */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border-radius: var(--r-pill);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  background: var(--surface-2);
+  color: var(--text-2);
+  white-space: nowrap;
+}
+.badge--up   { background: color-mix(in srgb, var(--up) 16%, transparent);   color: var(--up); }
+.badge--down { background: color-mix(in srgb, var(--down) 16%, transparent); color: var(--down); }
+.badge--warn { background: color-mix(in srgb, var(--warn) 16%, transparent); color: var(--warn); }
+.badge--info { background: color-mix(in srgb, var(--info) 16%, transparent); color: var(--info); }
+.badge--accent { background: var(--accent-dim); color: var(--accent); }
+
+/* Pastille d'estimation : rappelle qu'un chiffre n'est pas une mesure (§48) */
+.badge--estimate {
+  background: transparent;
+  color: var(--text-3);
+  border: 1px dashed var(--hairline);
+}
+
+/* — Barre de progression / jauge ————————————————— */
+.meter {
+  height: 10px;
+  border-radius: var(--r-pill);
+  background: var(--surface-2);
+  overflow: hidden;
+}
+.meter__fill {
+  height: 100%;
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  transition: width var(--dur-slow) var(--ease-out);
+}
+
+/* Jauge de zones (§28) : 5 bandes + curseur */
+.zonebar { position: relative; height: 12px; border-radius: var(--r-pill); overflow: hidden; display: flex; }
+.zonebar span { flex: 1; }
+.zone-cursor {
+  position: absolute; top: -4px; width: 4px; height: 20px;
+  border-radius: 2px; background: var(--text);
+  box-shadow: 0 0 0 3px var(--bg);
+  transition: left var(--dur-slow) var(--ease-out);
+  transform: translateX(-50%);
+}
+
+/* — Bottom sheet (§39) ————————————————————————————— */
+.sheet-scrim {
+  position: fixed; inset: 0;
+  background: var(--scrim);
+  backdrop-filter: blur(2px);
+  z-index: 90;
+  opacity: 0;
+  transition: opacity var(--dur) var(--ease);
+}
+.sheet-scrim[data-open="true"] { opacity: 1; }
+
+.sheet {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 91;
+  background: var(--bg-elevated);
+  border-radius: var(--r-xl) var(--r-xl) 0 0;
+  padding: var(--sp-3) calc(var(--gutter) + var(--safe-right))
+           calc(var(--sp-7) + var(--safe-bottom)) calc(var(--gutter) + var(--safe-left));
+  max-height: 88dvh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  transform: translateY(101%);
+  transition: transform var(--dur) var(--ease-out);
+  max-width: 720px;
+  margin-inline: auto;
+  box-shadow: 0 -1px 0 var(--hairline);
+}
+.sheet[data-open="true"] { transform: none; }
+
+.sheet__grabber {
+  width: 44px; height: 5px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  margin: var(--sp-1) auto var(--sp-5);
+}
+.sheet__title {
+  font-size: var(--fs-title);
+  font-weight: 700;
+  letter-spacing: var(--tracking-title);
+  margin-bottom: var(--sp-2);
+}
+.sheet__body { color: var(--text-2); line-height: 1.55; }
+.sheet__body p + p { margin-top: var(--sp-4); }
+.sheet__body strong { color: var(--text); font-weight: 600; }
+
+/* Explication à 3 niveaux (§7) */
+.explain__q {
+  color: var(--text);
+  font-weight: 700;
+  margin-top: var(--sp-5);
+  margin-bottom: var(--sp-2);
+}
+.explain__more {
+  margin-top: var(--sp-5);
+  color: var(--accent);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.explain__formula {
+  margin-top: var(--sp-4);
+  padding: var(--sp-3) var(--sp-4);
+  background: var(--surface);
+  border-radius: var(--r-sm);
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  overflow-x: auto;
+}
+.explain__source {
+  margin-top: var(--sp-5);
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+
+/* — Barre de navigation basse (§36) ————————————— */
+.dock {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  z-index: 50;
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  height: calc(var(--dock-h) + var(--safe-bottom));
+  padding-bottom: var(--safe-bottom);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-top: 1px solid var(--hairline);
+}
+.dock a {
+  display: grid;
+  place-items: center;
+  gap: 2px;
+  color: var(--text-3);
+  font-size: 10px;
+  font-weight: 600;
+  transition: color var(--dur-fast);
+}
+.dock a[aria-current="page"] { color: var(--accent); }
+.dock svg { width: 24px; height: 24px; }
+
+/* — États : chargement, vide, erreur (§46) ——————— */
+.skeleton {
+  background: linear-gradient(100deg,
+    var(--surface) 30%, var(--surface-2) 50%, var(--surface) 70%);
+  background-size: 220% 100%;
+  animation: shimmer 1.4s infinite linear;
+  border-radius: var(--r-sm);
+  color: transparent !important;
+}
+@keyframes shimmer { to { background-position: -220% 0; } }
+
+.empty {
+  text-align: center;
+  padding: var(--sp-8) var(--sp-4);
+  color: var(--text-2);
+}
+.empty__emoji { font-size: 40px; margin-bottom: var(--sp-4); }
+.empty__title { color: var(--text); font-weight: 700; font-size: var(--fs-h2); margin-bottom: var(--sp-2); }
+
+.notice {
+  display: flex;
+  gap: var(--sp-3);
+  padding: var(--sp-4);
+  border-radius: var(--r-md);
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  color: var(--text-2);
+  align-items: flex-start;
+}
+.notice strong { color: var(--text); display: block; margin-bottom: 2px; font-weight: 600; }
+.notice--warn   { background: color-mix(in srgb, var(--warn) 12%, var(--surface)); }
+.notice--danger { background: color-mix(in srgb, var(--down) 12%, var(--surface)); }
+
+/* Valeur inconnue : « — » et jamais « 0 € » (§46) */
+.unknown { color: var(--text-3); font-weight: 500; }
+
+/* — Formulaires ————————————————————————————————————— */
+.field { display: grid; gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.field label { font-size: var(--fs-sm); color: var(--text-2); font-weight: 500; }
+.field input, .field select, .field textarea {
+  background: var(--surface);
+  border-radius: var(--r-md);
+  padding: 14px var(--sp-4);
+  min-height: 52px;
+  color: var(--text);
+  width: 100%;
+  transition: box-shadow var(--dur-fast);
+}
+.field input:focus, .field select:focus, .field textarea:focus {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+.field__hint { font-size: var(--fs-xs); color: var(--text-3); }
+.field__error { font-size: var(--fs-xs); color: var(--down); }
+
+.switch-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  padding: var(--sp-4) 0;
+  min-height: 56px;
+}
+/* Le libellé peut rétrécir, le contrôle non : sans cela, « Apparence » se
+   casse sur trois lignes pour laisser la place au sélecteur. */
+.switch-row > div:first-child { min-width: 0; flex: 1 1 auto; }
+.switch-row > :not(:first-child) { flex: 0 0 auto; }
+.switch-row .segmented button { padding: 8px 12px; }
+.switch-row + .switch-row { border-top: 1px solid var(--hairline); }
+.switch-row__label { font-weight: 500; }
+.switch-row__hint  { font-size: var(--fs-sm); color: var(--text-2); }
+
+.switch {
+  width: 52px; height: 32px;
+  border-radius: var(--r-pill);
+  background: var(--surface-3);
+  position: relative;
+  flex: 0 0 auto;
+  transition: background var(--dur) var(--ease);
+}
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 3px; left: 3px;
+  width: 26px; height: 26px;
+  border-radius: var(--r-pill);
+  background: #fff;
+  transition: transform var(--dur) var(--ease);
+}
+.switch[aria-checked="true"] { background: var(--accent); }
+.switch[aria-checked="true"]::after { transform: translateX(20px); }
+
+/* — Toasts ————————————————————————————————————————— */
+.toasts {
+  position: fixed;
+  left: var(--gutter); right: var(--gutter);
+  bottom: calc(var(--dock-h) + var(--safe-bottom) + var(--sp-4));
+  z-index: 120;
+  display: grid;
+  gap: var(--sp-2);
+  justify-items: center;
+  pointer-events: none;
+}
+.toast {
+  background: var(--surface-3);
+  color: var(--text);
+  padding: var(--sp-3) var(--sp-5);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5);
+  animation: toast-in var(--dur) var(--ease-out);
+  max-width: 100%;
+}
+.toast--error   { background: var(--down); color: #fff; }
+.toast--success { background: var(--accent); color: var(--text-on-accent); }
+@keyframes toast-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+
+/* — Indicateur de fraîcheur (§45) ————————————————— */
+.freshness {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--fs-xs);
+  color: var(--text-3);
+}
+.freshness__dot {
+  width: 6px; height: 6px; border-radius: var(--r-pill);
+  background: var(--up);
+}
+.freshness--stale .freshness__dot { background: var(--warn); }
+.freshness--error .freshness__dot { background: var(--down); }
+.freshness--syncing .freshness__dot { background: var(--info); animation: pulse 1.2s infinite; }
+@keyframes pulse { 50% { opacity: .25; } }
+
+/* — Accordéon (§39) ————————————————————————————————— */
+.accordion { border-top: 1px solid var(--hairline); }
+.accordion__head {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  padding: var(--sp-4) 0;
+  font-weight: 600;
+  text-align: left;
+}
+.accordion__chev { color: var(--text-3); transition: transform var(--dur) var(--ease); }
+.accordion[data-open="true"] .accordion__chev { transform: rotate(180deg); }
+.accordion__body { padding-bottom: var(--sp-4); color: var(--text-2); }

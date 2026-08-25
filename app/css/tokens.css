@@ -1,0 +1,137 @@
+/* ==========================================================================
+   WALLET · Design tokens
+   Lecture des références jointes (Trade Republic + OKX) :
+     · fond noir absolu, cartes très légèrement plus claires, aucune bordure
+     · un seul accent vif (vert lime) + un accent secondaire (violet)
+     · chiffres énormes, graisse 700, tracking serré ; libellés gris moyen
+     · rayons généreux (20-28 px) et boutons complètement arrondis
+     · densité faible : beaucoup d'air vertical, peu d'éléments par écran
+   ========================================================================== */
+
+:root {
+  /* — Surfaces ————————————————————————————————————— */
+  --bg:            #000000;
+  --bg-elevated:   #0B0B0C;
+  --surface:       #151517;
+  --surface-2:     #1F1F22;
+  --surface-3:     #2A2A2E;
+  --hairline:      rgba(255,255,255,.08);
+  --scrim:         rgba(0,0,0,.72);
+
+  /* — Texte ——————————————————————————————————————— */
+  --text:          #FFFFFF;
+  --text-2:        #A1A1A6;
+  --text-3:        #6E6E73;
+  --text-on-accent:#0A0A0A;
+
+  /* — Accents ————————————————————————————————————— */
+  --accent:        #BFF23A;   /* lime : action principale, valeurs positives */
+  --accent-dim:    #2C3A10;   /* lime désaturé : fond de bouton secondaire   */
+  --accent-2:      #7C4DFF;   /* violet : dépenses, catégories               */
+  --up:            #34D96B;
+  --down:          #FF453A;
+  --warn:          #FF9F0A;
+  --info:          #64D2FF;
+  --neutral:       #8E8E93;
+
+  /* — Zones d'opportunité (§28) ——————————————————— */
+  --zone-exceptional: #34D96B;
+  --zone-interesting: #BFF23A;
+  --zone-neutral:     #FFD60A;
+  --zone-expensive:   #FF9F0A;
+  --zone-distribution:#FF453A;
+
+  /* — Typographie ————————————————————————————————— */
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter",
+          "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-num: "SF Pro Display", -apple-system, BlinkMacSystemFont, "Inter", sans-serif;
+
+  --fs-display: clamp(2.5rem, 11vw, 3.25rem);  /* le grand montant           */
+  --fs-title:   1.75rem;                        /* titre d'écran              */
+  --fs-h2:      1.1875rem;
+  --fs-body:    1rem;
+  --fs-sm:      .875rem;
+  --fs-xs:      .75rem;
+
+  --lh-tight: 1.05;
+  --lh-body:  1.45;
+  --tracking-display: -.035em;
+  --tracking-title:   -.02em;
+
+  /* — Rythme ——————————————————————————————————————— */
+  --sp-1: 4px;  --sp-2: 8px;  --sp-3: 12px; --sp-4: 16px;
+  --sp-5: 20px; --sp-6: 24px; --sp-7: 32px; --sp-8: 40px; --sp-9: 56px;
+
+  --r-sm: 12px; --r-md: 18px; --r-lg: 24px; --r-xl: 28px; --r-pill: 999px;
+
+  --gutter: 20px;
+  --nav-h: 56px;
+  --dock-h: 60px;
+
+  /* — Mouvement ————————————————————————————————————— */
+  --ease: cubic-bezier(.22,.61,.36,1);
+  --ease-out: cubic-bezier(.16,1,.3,1);
+  --dur-fast: 140ms;
+  --dur: 240ms;
+  --dur-slow: 420ms;
+
+  /* — Zones sûres iPhone ————————————————————————— */
+  --safe-top:    env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left, 0px);
+  --safe-right:  env(safe-area-inset-right, 0px);
+
+  color-scheme: dark;
+}
+
+/* — Thème clair ——————————————————————————————————————
+   Même hiérarchie, inversée. On garde le lime : il reste lisible sur blanc
+   à condition de poser du texte sombre dessus (--text-on-accent).          */
+:root[data-theme="light"] {
+  --bg:          #FFFFFF;
+  --bg-elevated: #FFFFFF;
+  --surface:     #F2F2F7;
+  --surface-2:   #E5E5EA;
+  --surface-3:   #D1D1D6;
+  --hairline:    rgba(0,0,0,.10);
+  --scrim:       rgba(0,0,0,.35);
+
+  --text:        #000000;
+  --text-2:      #55555C;
+  --text-3:      #8E8E93;
+
+  --accent:      #8CC000;
+  --accent-dim:  #EAF7C4;
+  --accent-2:    #6437E8;
+  --up:          #128A3C;
+  --down:        #D42B20;
+  --warn:        #B26A00;
+
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-theme="light"]) {
+    --bg:          #FFFFFF;
+    --bg-elevated: #FFFFFF;
+    --surface:     #F2F2F7;
+    --surface-2:   #E5E5EA;
+    --surface-3:   #D1D1D6;
+    --hairline:    rgba(0,0,0,.10);
+    --scrim:       rgba(0,0,0,.35);
+    --text:        #000000;
+    --text-2:      #55555C;
+    --text-3:      #8E8E93;
+    --accent:      #8CC000;
+    --accent-dim:  #EAF7C4;
+    --accent-2:    #6437E8;
+    --up:          #128A3C;
+    --down:        #D42B20;
+    --warn:        #B26A00;
+    color-scheme: light;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --dur-fast: 0ms; --dur: 0ms; --dur-slow: 0ms; }
+}
