@@ -35,7 +35,7 @@ export const config = {
   ...injected,
 
   /** Version affichée dans Profil, et clé de cache du service worker. */
-  version: '1.0.0',
+  version: '1.0.1',
 
   /** Devise de repli tant que les préférences ne sont pas chargées. */
   defaultCurrency: 'EUR',
