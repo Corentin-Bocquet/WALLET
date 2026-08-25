@@ -1,0 +1,60 @@
+name: Tests
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  tests:
+    name: Moteurs, schéma et fonctions
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # --- Moteurs et parseurs (aucune dépendance à installer) -----------
+      - name: Tests unitaires
+        run: node --test tests/*.test.js
+
+      # --- Schéma SQL : migrations + RLS + apprentissage ------------------
+      # Le runner GitHub embarque déjà PostgreSQL ; on le démarre plutôt que
+      # de tirer une image, c'est plus rapide et ça ne coûte rien.
+      - name: Installer PostgreSQL
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql postgresql-contrib
+
+      - name: Vérifier le schéma
+        run: |
+          export PGBIN=$(ls -d /usr/lib/postgresql/*/bin | head -1)
+          export PGDATA=/var/tmp/wallet-pg
+          export PGHOST=/var/tmp
+          sudo chmod 777 /var/tmp
+          scripts/verify-schema.sh
+
+      # --- Edge Functions : typage --------------------------------------
+      - name: Vérifier le typage des Edge Functions
+        run: |
+          npm i --no-save typescript@5
+          cd supabase/functions
+          npx tsc -p tsconfig.check.json 2>&1 \
+            | grep -vE "Cannot find module 'jsr:|Cannot find name 'Deno'" \
+            | tee /tmp/tsc.log
+          # Les imports distants et les globales Deno ne sont pas résolus ici ;
+          # toute AUTRE erreur doit faire échouer la CI.
+          if [ -s /tmp/tsc.log ]; then
+            echo "::error::Erreurs de typage dans les Edge Functions"
+            exit 1
+          fi
+
+      # --- Le glossaire embarqué doit refléter le SQL --------------------
+      - name: Glossaire à jour
+        run: |
+          export PGHOST=/var/tmp PGPORT=55432
+          node --test tests/glossary.test.js

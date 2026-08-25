@@ -1,0 +1,52 @@
+name: Déploiement
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'app/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch:
+
+# GitHub Pages : hébergement gratuit, pas de serveur à administrer.
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # L'URL et la clé publique du projet Supabase peuvent être injectées
+      # depuis les variables du dépôt, pour que l'application arrive déjà
+      # configurée. La clé « anon » est publique par conception ; ne mettez
+      # JAMAIS la clé service_role ici.
+      - name: Injecter la configuration
+        if: vars.SUPABASE_URL != ''
+        run: |
+          cat > app/config.local.js <<EOF
+          window.WALLET_CONFIG = {
+            supabaseUrl: '${{ vars.SUPABASE_URL }}',
+            supabaseAnonKey: '${{ vars.SUPABASE_ANON_KEY }}',
+          };
+          EOF
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: app
+
+      - id: deployment
+        uses: actions/deploy-pages@v4
