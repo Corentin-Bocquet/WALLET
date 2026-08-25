@@ -63,7 +63,7 @@ export async function profileScreen() {
 function identityCard(profile) {
   const avatar = h('div.avatar', {
     style: { width: '64px', height: '64px', fontSize: '22px', fontWeight: '700' },
-  }, initials(profile?.full_name, profile?.email));
+  }, repo.isDemoMode() ? '🧪' : initials(profile?.full_name, profile?.email));
 
   if (profile?.avatar_path) {
     repo.getAvatarUrl(profile.avatar_path).then((url) => {
@@ -80,10 +80,14 @@ function identityCard(profile) {
       avatar,
       h('div', { style: { minWidth: 0, flex: '1' } },
         h('div', { style: { fontWeight: '700', fontSize: '18px' } },
-          profile?.full_name || profile?.username || 'Mon compte'),
+          repo.isDemoMode()
+            ? 'Mode démonstration'
+            : (profile?.full_name || profile?.username || 'Mon compte')),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)', overflow: 'hidden',
           textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
-          profile?.email || 'Mode démonstration'),
+          repo.isDemoMode()
+            ? 'Données simulées, stockées sur cet appareil'
+            : (profile?.email ?? '')),
       ),
       h('span', { style: { color: 'var(--text-3)' } }, '›'),
     ),
@@ -107,7 +111,7 @@ function simpleSettings(settings) {
     h('div.switch-row',
       h('div',
         h('div.switch-row__label', 'Apparence'),
-        h('div.switch-row__hint', 'Sombre, clair, ou celui du téléphone'),
+        h('div.switch-row__hint', 'Ou celle du téléphone'),
       ),
       h('div.segmented',
         [['dark', 'Sombre'], ['light', 'Clair'], ['system', 'Auto']].map(([value, label]) =>

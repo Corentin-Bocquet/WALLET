@@ -398,6 +398,11 @@
   padding: var(--sp-4) 0;
   min-height: 56px;
 }
+/* Le libellé peut rétrécir, le contrôle non : sans cela, « Apparence » se
+   casse sur trois lignes pour laisser la place au sélecteur. */
+.switch-row > div:first-child { min-width: 0; flex: 1 1 auto; }
+.switch-row > :not(:first-child) { flex: 0 0 auto; }
+.switch-row .segmented button { padding: 8px 12px; }
 .switch-row + .switch-row { border-top: 1px solid var(--hairline); }
 .switch-row__label { font-weight: 500; }
 .switch-row__hint  { font-size: var(--fs-sm); color: var(--text-2); }
