@@ -222,7 +222,7 @@ export function sparkline(values, { width = 64, height = 24, color } = {}) {
  * l'aire de chaque bulle est proportionnelle au montant, ce qui se lit bien
  * plus vite qu'un camembert.
  */
-export function bubbleChart(items, { size = 300, currency = 'EUR', onSelect = null } = {}) {
+export function bubbleChart(items, { size = 320, currency = 'EUR', onSelect = null } = {}) {
   const data = (items || [])
     .map((it) => ({ ...it, value: Math.abs(Number(it.value ?? it.total)) }))
     .filter((it) => Number.isFinite(it.value) && it.value > 0)
@@ -234,45 +234,63 @@ export function bubbleChart(items, { size = 300, currency = 'EUR', onSelect = nu
   }
 
   const total = data.reduce((a, it) => a + it.value, 0);
-  // Rayon ∝ √valeur : c'est l'AIRE qui doit être proportionnelle, pas le rayon,
-  // sinon les grands écarts deviennent illisibles.
-  const maxRadius = size * 0.29;
-  const radius = (v) => Math.max(20, maxRadius * Math.sqrt(v / data[0].value));
 
-  // Placement en spirale simple, déterministe.
-  const spots = [
-    { cx: 0.62, cy: 0.36 }, { cx: 0.32, cy: 0.60 }, { cx: 0.63, cy: 0.72 },
-    { cx: 0.24, cy: 0.24 }, { cx: 0.84, cy: 0.56 },
-  ];
+  // L'AIRE doit être proportionnelle au montant, pas le rayon : sinon un
+  // écart de 1 à 4 paraît un écart de 1 à 16.
+  const maxRadius = size * 0.26;
+  const minRadius = size * 0.055;
+  const radii = data.map((it) =>
+    Math.max(minRadius, maxRadius * Math.sqrt(it.value / data[0].value)));
 
-  const svg = svgEl('svg', { viewBox: `0 0 ${size} ${size}`, width: '100%',
-    style: 'max-width:340px;margin-inline:auto', role: 'img',
-    'aria-label': 'Répartition par catégorie' });
+  const placed = pack(radii, size);
+
+  // Le cadre est ajusté au contenu réel plutôt que fixé à l'avance : quelle
+  // que soit la disposition trouvée, aucune bulle ne peut être rognée.
+  const pad = 4;
+  const minX = Math.min(...placed.map((p, i) => p.cx - radii[i])) - pad;
+  const maxX = Math.max(...placed.map((p, i) => p.cx + radii[i])) + pad;
+  const minY = Math.min(...placed.map((p, i) => p.cy - radii[i])) - pad;
+  const maxY = Math.max(...placed.map((p, i) => p.cy + radii[i])) + pad;
+
+  const svg = svgEl('svg', {
+    viewBox: `${minX.toFixed(1)} ${minY.toFixed(1)} ${(maxX - minX).toFixed(1)} ${(maxY - minY).toFixed(1)}`,
+    width: '100%',
+    style: 'max-width:340px;max-height:300px;margin-inline:auto;display:block',
+    role: 'img', 'aria-label': 'Répartition par catégorie',
+  });
 
   data.forEach((item, i) => {
-    const spot = spots[i] || spots[spots.length - 1];
-    const r = radius(item.value);
-    const cx = spot.cx * size;
-    const cy = spot.cy * size;
+    const { cx, cy } = placed[i];
+    const r = radii[i];
+    const share = Math.round((item.value / total) * 100);
 
-    const group = svgEl('g', { style: 'cursor:pointer' });
+    const group = svgEl('g', onSelect ? { style: 'cursor:pointer' } : {});
+    const title = svgEl('title');
+    title.textContent = `${item.label} : ${money(item.value, { currency })} (${share} %)`;
+    group.append(title);
+
     group.append(svgEl('circle', { cx, cy, r, fill: item.color || 'var(--surface-2)' }));
 
-    const share = Math.round((item.value / total) * 100);
-    if (r > 34) {
+    // On n'écrit dans la bulle que si le texte y tient vraiment. Une bulle
+    // trop petite garde son infobulle et la légende qui suit.
+    const amountSize = Math.min(r * 0.34, 20);
+    if (amountSize >= 10) {
       const amount = svgEl('text', {
-        x: cx, y: cy - 2, 'text-anchor': 'middle',
-        'font-size': Math.max(12, r * 0.24), 'font-weight': 700, fill: '#0A0A0A',
+        x: cx, y: cy + (r > 44 ? -1 : 4), 'text-anchor': 'middle',
+        'font-size': amountSize.toFixed(1), 'font-weight': 700, fill: '#0A0A0A',
       });
       amount.textContent = money(item.value, { currency, compact: true, decimals: 0 });
       group.append(amount);
 
-      const label = svgEl('text', {
-        x: cx, y: cy + Math.max(13, r * 0.26), 'text-anchor': 'middle',
-        'font-size': Math.max(10, r * 0.17), fill: 'rgba(0,0,0,.65)',
-      });
-      label.textContent = `${item.label} · ${share} %`;
-      group.append(label);
+      const labelSize = amountSize * 0.62;
+      if (r > 44 && labelSize >= 8) {
+        const label = svgEl('text', {
+          x: cx, y: cy + amountSize * 0.95, 'text-anchor': 'middle',
+          'font-size': labelSize.toFixed(1), fill: 'rgba(0,0,0,.66)',
+        });
+        label.textContent = truncate(item.label, Math.floor(r / 3.4));
+        group.append(label);
+      }
     }
 
     if (onSelect) group.addEventListener('click', () => onSelect(item));
@@ -280,6 +298,52 @@ export function bubbleChart(items, { size = 300, currency = 'EUR', onSelect = nu
   });
 
   return svg;
+}
+
+const truncate = (text, max) =>
+  (text.length > max ? `${text.slice(0, Math.max(1, max - 1))}…` : text);
+
+/**
+ * Placement sans chevauchement.
+ *
+ * La plus grosse bulle occupe le centre ; les suivantes sont posées en
+ * couronne, chacune à la première position angulaire libre. Le résultat est
+ * déterministe — deux rendus des mêmes données donnent la même image, ce qui
+ * évite que la répartition « bouge » à chaque rafraîchissement.
+ */
+function pack(radii, size) {
+  const placed = [];
+  const cx = size / 2;
+  const cy = size / 2;
+  const gap = 3;
+
+  radii.forEach((r, i) => {
+    if (i === 0) { placed.push({ cx, cy, r }); return; }
+
+    let best = null;
+    // On essaie des couronnes de plus en plus larges autour du centre.
+    for (let ring = 0; ring < 14 && !best; ring += 1) {
+      const distance = radii[0] + r + gap + ring * (size * 0.028);
+      for (let step = 0; step < 24; step += 1) {
+        // Départ à -100°, sens horaire : la deuxième bulle se pose en haut
+        // à droite, comme sur les références.
+        const angle = (-100 + step * (360 / 24)) * (Math.PI / 180);
+        const x = cx + Math.cos(angle) * distance;
+        const y = cy + Math.sin(angle) * distance;
+
+        if (placed.some((p) => Math.hypot(p.cx - x, p.cy - y) < p.r + r + gap)) continue;
+
+        best = { cx: x, cy: y, r };
+        break;
+      }
+    }
+
+    // Repli : aucune position libre trouvée (cas théorique, 14 couronnes
+    // × 24 angles). On pose la bulle à droite de l'ensemble.
+    placed.push(best ?? { cx: cx + radii[0] + r + gap, cy, r });
+  });
+
+  return placed;
 }
 
 /**

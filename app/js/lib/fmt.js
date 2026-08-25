@@ -82,6 +82,19 @@ export function trendArrow(value) {
   return value > 0 ? '▲' : '▼';
 }
 
+/**
+ * Fourchette « 31 284 € – 125 000 € ».
+ * Les deux bornes partagent la même notation, décidée par la plus grande :
+ * afficher « 31 284 € – 125 k € » donne l'impression de deux unités
+ * différentes.
+ */
+export function range(low, high, options = {}) {
+  if (!isNum(low) || !isNum(high)) return UNKNOWN;
+  const compactBoth = Math.max(Math.abs(low), Math.abs(high)) >= 100000;
+  const shared = { ...options, compact: compactBoth, decimals: options.decimals ?? 0 };
+  return `${money(low, shared)} – ${money(high, shared)}`;
+}
+
 /** Grande quantité compacte : 1 234 567 → « 1,2 M ». */
 export function compact(value, { locale = config.defaultLocale } = {}) {
   const n = typeof value === 'string' ? Number(value) : value;

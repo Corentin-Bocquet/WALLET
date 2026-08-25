@@ -298,9 +298,10 @@ export function generateInvestmentTrades({ seed = 991, history } = {}) {
   const rand = rng(seed);
   const btc = history.get('asset-btc');
   const trades = [];
-  const step = Math.floor(btc.length / 26);
+  const step = 30;                    // cadence mensuelle, comme un vrai DCA
+  const count = 30;                   // ~2 ans et demi d'achats
 
-  for (let i = btc.length - 1; i > btc.length - 26 * step; i -= step) {
+  for (let i = btc.length - 1; i > btc.length - count * step && i >= 0; i -= step) {
     const point = btc[i];
     if (!point) continue;
     // Achats volontairement irréguliers, pour que l'analyse ait quelque chose
