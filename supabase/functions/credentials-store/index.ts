@@ -57,9 +57,11 @@ Deno.serve(async (request) => {
         ? await krakenReadOnly({ apiKey, apiSecret })
         : await okxReadOnly({ apiKey, apiSecret, passphrase });
     } catch (error) {
+      const detail = String((error as Error)?.message ?? '').slice(0, 200);
+      console.error('[credentials-verify]', provider, detail);
       throw new HttpError(
         `La clé n'a pas pu être vérifiée auprès de ${provider === 'okx' ? 'OKX' : 'Kraken'}. `
-        + `Vérifiez qu'elle est active et correctement recopiée.`,
+        + `Réponse du fournisseur : ${detail || 'aucune'}`,
         400,
       );
     }
