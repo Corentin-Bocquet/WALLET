@@ -2,7 +2,9 @@ name: Déploiement
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - 'claude/**'
     paths:
       - 'app/**'
       - '.github/workflows/deploy.yml'
@@ -42,7 +44,11 @@ jobs:
           };
           EOF
 
+      # enablement: true active GitHub Pages via l'API si ce n'est pas déjà
+      # fait, ce qui évite d'avoir à le cocher à la main dans les réglages.
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:
