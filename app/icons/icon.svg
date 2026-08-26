@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="WALLET">
   <rect width="512" height="512" fill="#000000"/>
-  <path d="M256 62 450 256 256 450 62 256Z" fill="#7C4DFF"/>
-  <path d="M256 134 378 256 256 378 134 256Z" fill="#BFF23A"/>
+  <path d="M256 108 404 256 256 404 108 256Z" fill="none" stroke="#FFFFFF" stroke-width="13.5"/>
+  <path d="M256 166 346 256 256 346 166 256Z" fill="#FFFFFF"/>
 </svg>
