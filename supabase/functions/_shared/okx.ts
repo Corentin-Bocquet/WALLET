@@ -12,7 +12,19 @@
 import { hmac, toBase64 } from './crypto.ts';
 import { HttpError } from './http.ts';
 
-const BASE = 'https://www.okx.com';
+/**
+ * OKX exploite des infrastructures SEPAREES et non interoperables :
+ * le portail mondial, et un portail dedie aux utilisateurs de l'EEE impose
+ * par la reglementation europeenne. Une cle emise sur l'un renvoie
+ * « API key doesn't exist » (50119) sur l'autre.
+ *
+ * On ne peut pas deviner de quel cote se trouve le compte : on essaie donc
+ * les hotes dans l'ordre et on retient le premier qui authentifie.
+ */
+const HOSTS = ['https://www.okx.com', 'https://my.okx.com', 'https://eea.okx.com'];
+
+/** Codes signifiant « cette cle n'appartient pas a cette infrastructure ». */
+const WRONG_HOST_CODES = new Set(['50119', '50111']);
 
 const ALLOWED = [
   '/api/v5/account/balance',
@@ -35,32 +47,53 @@ export async function okxPrivate(
 
   const search = new URLSearchParams(query).toString();
   const fullPath = search ? `${path}?${search}` : path;
-  const timestamp = new Date().toISOString();
 
-  const signature = await hmac(keys.apiSecret, `${timestamp}GET${fullPath}`, 'SHA-256');
+  let lastDetail = '';
+  let response: Response | null = null;
 
-  const response = await fetch(BASE + fullPath, {
-    method: 'GET',
-    headers: {
-      'OK-ACCESS-KEY': keys.apiKey,
-      'OK-ACCESS-SIGN': toBase64(signature),
-      'OK-ACCESS-TIMESTAMP': timestamp,
-      'OK-ACCESS-PASSPHRASE': keys.passphrase,
-      'Content-Type': 'application/json',
-      'User-Agent': 'WALLET/1.0 (read-only)',
-    },
-  });
+  for (const host of HOSTS) {
+    // L'horodatage est resigne a chaque tentative : OKX refuse une signature
+    // dont l'horodatage a plus de 30 secondes.
+    const timestamp = new Date().toISOString();
+    const signature = await hmac(keys.apiSecret, `${timestamp}GET${fullPath}`, 'SHA-256');
 
-  if (!response.ok) {
-    // OKX renvoie un corps JSON explicite même sur un 401 : on le lit plutôt
-    // que de le jeter, sinon le vrai code d'erreur est perdu.
-    const raw = await response.text().catch(() => '');
-    let detail = raw.slice(0, 200);
+    const attempt = await fetch(host + fullPath, {
+      method: 'GET',
+      headers: {
+        'OK-ACCESS-KEY': keys.apiKey,
+        'OK-ACCESS-SIGN': toBase64(signature),
+        'OK-ACCESS-TIMESTAMP': timestamp,
+        'OK-ACCESS-PASSPHRASE': keys.passphrase,
+        'Content-Type': 'application/json',
+        'User-Agent': 'WALLET/1.0 (read-only)',
+      },
+    }).catch(() => null);
+
+    if (!attempt) { lastDetail = `${host} injoignable`; continue; }
+
+    if (attempt.ok) { response = attempt; break; }
+
+    const raw = await attempt.text().catch(() => '');
+    let code = '';
+    lastDetail = raw.slice(0, 200);
     try {
       const parsed = JSON.parse(raw);
-      if (parsed?.code || parsed?.msg) detail = `${parsed.msg ?? ''} (code ${parsed.code ?? '?'})`;
-    } catch { /* corps non JSON : on garde le texte brut */ }
-    throw new HttpError(`OKX a répondu ${response.status} : ${detail || 'aucun détail'}`, 400);
+      code = String(parsed?.code ?? '');
+      if (parsed?.code || parsed?.msg) lastDetail = `${parsed.msg ?? ''} (code ${parsed.code ?? '?'})`;
+    } catch { /* corps non JSON */ }
+
+    // Mauvaise infrastructure : on tente la suivante. Toute autre erreur
+    // (passphrase fausse, permissions) est definitive, on s'arrete.
+    if (WRONG_HOST_CODES.has(code)) continue;
+    throw new HttpError(`OKX a répondu ${attempt.status} : ${lastDetail || 'aucun détail'}`, 400);
+  }
+
+  if (!response) {
+    throw new HttpError(
+      `OKX refuse cette clé sur ses trois infrastructures (mondiale, my, eea). `
+      + `Dernière réponse : ${lastDetail || 'aucune'}`,
+      400,
+    );
   }
 
   const payload = await response.json();
