@@ -130,6 +130,7 @@ export const updateSettings = async (patch) => {
   return backend.updateSettings(patch);
 };
 export const seedDefaults = () => backend.seedDefaults?.();
+export const getFxRates = () => cached('fx', 30 * MIN, () => backend.getFxRates?.() ?? {});
 
 /* ================================================================== */
 /* Marché                                                              */
