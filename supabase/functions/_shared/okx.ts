@@ -52,7 +52,15 @@ export async function okxPrivate(
   });
 
   if (!response.ok) {
-    throw new HttpError(`OKX a répondu ${response.status}.`, 502, false);
+    // OKX renvoie un corps JSON explicite même sur un 401 : on le lit plutôt
+    // que de le jeter, sinon le vrai code d'erreur est perdu.
+    const raw = await response.text().catch(() => '');
+    let detail = raw.slice(0, 200);
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.code || parsed?.msg) detail = `${parsed.msg ?? ''} (code ${parsed.code ?? '?'})`;
+    } catch { /* corps non JSON : on garde le texte brut */ }
+    throw new HttpError(`OKX a répondu ${response.status} : ${detail || 'aucun détail'}`, 400);
   }
 
   const payload = await response.json();
