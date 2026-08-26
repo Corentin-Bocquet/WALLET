@@ -49,8 +49,25 @@ export async function writeHoldings(
       continue;
     }
 
-    const asset = bySymbol.get(balance.symbol);
-    if (!asset) { unknown.push(balance.symbol); continue; }
+    let asset = bySymbol.get(balance.symbol);
+
+    // Actif absent du référentiel : on le CRÉE au lieu de l'ignorer. Un solde
+    // qui disparaît du patrimoine sans un mot est le pire des comportements ;
+    // market-sync lui trouvera une cotation au prochain passage.
+    if (!asset) {
+      const { data: created } = await service.from('assets').upsert({
+        kind: 'crypto',
+        symbol: balance.symbol,
+        name: balance.symbol,
+        external_id: `exchange:${balance.symbol}`,
+        source: 'exchange',
+      }, { onConflict: 'kind,symbol,source' }).select('id, symbol, kind').maybeSingle();
+
+      if (!created) { unknown.push(balance.symbol); continue; }
+      asset = created as { id: string; symbol: string; kind: string };
+      bySymbol.set(balance.symbol, asset);
+      unknown.push(balance.symbol);
+    }
 
     const previous = existingByAsset.get(asset.id);
     if (previous?.source === 'manual') continue;
