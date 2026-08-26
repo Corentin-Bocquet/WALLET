@@ -5,11 +5,11 @@ name: Synchronisation planifiée
 # quelques secondes.
 on:
   schedule:
-    # Marché : toutes les 2 heures. Suffisant pour un suivi de patrimoine,
+    # Marché : tous les quarts d'heure. Suffisant pour un suivi de patrimoine,
     # et très en dessous des quotas gratuits de CoinGecko.
-    - cron: '7 */2 * * *'
-    # Instantané du patrimoine et alertes : une fois par jour, le soir.
-    - cron: '17 21 * * *'
+    - cron: '*/15 * * * *'
+    # Instantané du patrimoine et alertes : toutes les heures.
+    - cron: '17 * * * *'
   workflow_dispatch:
 
 jobs:
@@ -29,7 +29,7 @@ jobs:
           echo
 
       - name: Instantané du patrimoine et alertes
-        if: github.event.schedule == '17 21 * * *' || github.event_name == 'workflow_dispatch'
+        if: github.event.schedule != '*/15 * * * *' || github.event_name == 'workflow_dispatch'
         run: |
           if [ -z "${{ secrets.SUPABASE_FUNCTIONS_URL }}" ]; then exit 0; fi
           for fn in portfolio-snapshot alerts-run; do
