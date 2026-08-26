@@ -51,9 +51,11 @@ Deno.serve(async (request) => {
 
     // Le cash de l'exchange devient le solde du compte ; s'il n'y en a pas,
     // le solde reste null plutôt que 0 (§46).
+    const cash = await convertCash(service, result.cashByCurrency, 'EUR');
     await service.from('accounts').update({
-      balance: result.cash > 0 ? result.cash : null,
+      balance: cash.total > 0 ? cash.total : null,
       balance_at: new Date().toISOString(),
+      metadata: { cash_by_currency: cash.detail, cash_unconverted: cash.missing },
     }).eq('id', account.id);
 
     // Historique d'achats, pour l'analyse de comportement. Un échec ici ne
@@ -82,7 +84,8 @@ Deno.serve(async (request) => {
     return json({
       ok: true,
       holdings: result.written,
-      cash: result.cash,
+      cash: cash.total,
+      cash_by_currency: cash.detail,
       trades: tradesImported,
       unknown_assets: result.unknown,
     });
@@ -140,3 +143,44 @@ const normalizeBase = (raw: string) => {
   const aliases: Record<string, string> = { XXBT: 'BTC', XBT: 'BTC', XETH: 'ETH', XDG: 'DOGE' };
   return aliases[raw] ?? (/^X[A-Z]{3}$/.test(raw) ? raw.slice(1) : raw);
 };
+
+/**
+ * Convertit des liquidites multidevises vers la devise du compte.
+ * Les taux viennent de la table fx_rates (base EUR, alimentee par market-sync).
+ * Une devise sans taux connu n'est PAS additionnee en silence : elle est
+ * signalee, sinon le patrimoine afficherait un chiffre faux avec assurance.
+ */
+async function convertCash(
+  service: ReturnType<typeof serviceClient>,
+  cashByCurrency: Record<string, number>,
+  target = 'EUR',
+): Promise<{ total: number; detail: Record<string, number>; missing: string[] }> {
+  const entries = Object.entries(cashByCurrency).filter(([, v]) => v > 0);
+  if (!entries.length) return { total: 0, detail: {}, missing: [] };
+
+  const { data: rates } = await service.from('fx_rates')
+    .select('quote, rate, day').eq('base', 'EUR')
+    .order('day', { ascending: false }).limit(60);
+
+  const eurTo = new Map<string, number>();
+  for (const r of rates ?? []) {
+    if (!eurTo.has(r.quote)) eurTo.set(r.quote, Number(r.rate));
+  }
+  eurTo.set('EUR', 1);
+
+  const targetRate = eurTo.get(target);
+  let total = 0;
+  const missing: string[] = [];
+
+  for (const [currency, amount] of entries) {
+    const rate = eurTo.get(currency);
+    if (!rate || !targetRate) { missing.push(currency); continue; }
+    total += (amount / rate) * targetRate;   // devise -> EUR -> devise cible
+  }
+
+  return {
+    total: Math.round(total * 100) / 100,
+    detail: Object.fromEntries(entries),
+    missing,
+  };
+}
