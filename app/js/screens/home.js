@@ -16,6 +16,7 @@ import {
 import { explainChip, labelWithInfo } from '../components/explain.js';
 import { areaChart, barList } from '../components/chart.js';
 import { money, pct, day as fmtDay, trendClass } from '../lib/fmt.js';
+import { SUPPORTED, displayCurrency, setDisplayCurrency, cycleCurrency, canDisplay, symbolOf } from '../lib/currency.js';
 import * as repo from '../data/repo.js';
 import { openAssistant } from './assistant.js';
 
@@ -107,13 +108,26 @@ async function renderHero(host) {
     const changePct = first ? ((netWorth.total / first) - 1) * 100 : null;
 
     mount(container,
-      bigAmount(netWorth.total, {
-        label: 'Patrimoine total',
-        explain: 'net_worth',
-        change,
-        changePct,
-        changeLabel: RANGES.find((r) => r.key === days)?.label,
-      }),
+      h('div', {
+        // Balayage horizontal sur le montant : le geste que l'on fait
+        // naturellement pour « voir l'autre côté ».
+        ontouchstart: (event) => { swipeFrom = event.changedTouches[0].clientX; },
+        ontouchend: (event) => {
+          if (swipeFrom === null) return;
+          const delta = event.changedTouches[0].clientX - swipeFrom;
+          swipeFrom = null;
+          if (Math.abs(delta) > 45) cycleCurrency(delta < 0 ? 1 : -1);
+        },
+      },
+        bigAmount(netWorth.total, {
+          label: 'Patrimoine total',
+          explain: 'net_worth',
+          change,
+          changePct,
+          changeLabel: RANGES.find((r) => r.key === days)?.label,
+        }),
+        currencySwitch(),
+      ),
 
       h('div', { style: { marginTop: '10px' } },
         freshness(sync.market?.last_success, {
@@ -154,6 +168,34 @@ async function renderHero(host) {
 
   paint();
   mount(host, container);
+}
+
+
+/**
+ * Bascule euro / dollar.
+ *
+ * Une devise dont le taux est inconnu est affichée désactivée plutôt que
+ * masquée : l'utilisateur voit qu'elle existe et qu'elle est indisponible,
+ * au lieu de se demander où est passé le bouton.
+ */
+let swipeFrom = null;
+
+function currencySwitch() {
+  const active = displayCurrency();
+  return h('div.segmented', {
+    role: 'group',
+    'aria-label': 'Devise d’affichage',
+    style: { marginTop: '12px', maxWidth: '180px' },
+  },
+    SUPPORTED.map((code) => h('button', {
+      type: 'button',
+      'aria-selected': String(code === active),
+      disabled: !canDisplay(code),
+      title: canDisplay(code) ? `Afficher en ${code}` : `Taux ${code} indisponible`,
+      'data-sound': 'toggle',
+      onclick: () => setDisplayCurrency(code),
+    }, `${symbolOf(code)} ${code}`)),
+  );
 }
 
 function splitTile(label, value, emoji, onClick) {
