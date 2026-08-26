@@ -40,11 +40,14 @@ export async function writeHoldings(
 
   const rows: Record<string, unknown>[] = [];
   const unknown: string[] = [];
-  let cash = 0;
+  const cashByCurrency: Record<string, number> = {};
 
   for (const balance of balances) {
     // Les devises fiat d'un exchange sont du cash, pas une position.
-    if (FIAT.has(balance.symbol)) { cash += balance.quantity; continue; }
+    if (FIAT.has(balance.symbol)) {
+      cashByCurrency[balance.symbol] = (cashByCurrency[balance.symbol] ?? 0) + balance.quantity;
+      continue;
+    }
 
     const asset = bySymbol.get(balance.symbol);
     if (!asset) { unknown.push(balance.symbol); continue; }
@@ -75,7 +78,7 @@ export async function writeHoldings(
       .in('id', stale.map((h) => h.id));
   }
 
-  return { written: rows.length, cash, unknown };
+  return { written: rows.length, cashByCurrency, unknown };
 }
 
 export const isStable = (symbol: string) => STABLE.has(symbol);
