@@ -16,6 +16,7 @@ import { bottomNav } from './components/nav.js';
 import { toast } from './lib/toast.js';
 import { config, isConfigured } from './config.js';
 import * as repo from './data/repo.js';
+import { setRates, onCurrencyChange } from './lib/currency.js';
 
 import { authScreen } from './screens/auth.js';
 
@@ -57,6 +58,11 @@ boot().catch((error) => {
 
 async function boot() {
   await repo.initBackend();
+
+  // Les taux de change alimentent le basculement euro / dollar. Un échec ici
+  // n'empêche pas l'application de démarrer : on reste simplement en euros.
+  repo.getFxRates().then(setRates).catch(() => {});
+  onCurrencyChange(() => refresh());
 
   let session = null;
   try {
