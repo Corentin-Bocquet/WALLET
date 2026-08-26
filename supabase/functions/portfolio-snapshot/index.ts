@@ -74,7 +74,18 @@ async function snapshotFor(service: ReturnType<typeof serviceClient>, userId: st
 
   for (const account of accounts ?? []) {
     if (!account.include_in_net_worth || account.is_active === false) continue;
-    if (account.kind === 'exchange') continue;          // valorisé par les positions
+
+    // Un compte d'exchange est valorisé par ses positions POUR LES CRYPTOS,
+    // mais ses liquidités (euros et dollars laissés sur la plateforme) ne sont
+    // pas des positions : sans cette ligne elles disparaissaient du patrimoine.
+    // On ne les compte que si un solde a réellement été relevé.
+    if (account.kind === 'exchange') {
+      if (account.balance !== null && account.balance !== undefined) {
+        cash += Number(account.balance);
+      }
+      continue;
+    }
+
     if (account.balance === null || account.balance === undefined) {
       partial = true;
       missing.push(account.label);
