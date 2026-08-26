@@ -71,7 +71,7 @@ Deno.serve(async (request) => {
     });
 
     return json({
-      ok: true, holdings: result.written, cash: result.cash,
+      ok: true, holdings: result.written, cash: cash.total, cash_by_currency: cash.detail,
       trades: fillsImported, unknown_assets: result.unknown,
     });
   } catch (error) {
