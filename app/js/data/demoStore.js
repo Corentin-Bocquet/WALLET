@@ -231,6 +231,11 @@ export const demoBackend = {
     return { ...(await this.getProfile()), ...persisted.settings.profile };
   },
 
+  /** Taux figé : le mode démonstration n'appelle aucun service extérieur. */
+  async getFxRates() {
+    return { USD: 1.09 };
+  },
+
   async getSettings() {
     return {
       base_currency: 'EUR', locale: 'fr-FR', theme: 'dark', ui_mode: 'simple',
