@@ -7,6 +7,7 @@
  */
 
 import { config } from '../config.js';
+import { displayCurrency, fromBase } from './currency.js';
 
 export const UNKNOWN = '—';
 
@@ -21,14 +22,22 @@ const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
 
 /** Montant en devise. `compact` pour les gros nombres (1,2 M€). */
 export function money(value, {
-  currency = config.defaultCurrency,
+  currency,
   locale = config.defaultLocale,
   decimals,
   compact = false,
   sign = false,
 } = {}) {
-  const n = typeof value === 'string' ? Number(value) : value;
+  // Sans devise explicite, le montant est supposé être en euros (la base de
+  // tous les calculs) et suit la devise choisie par l'utilisateur. Un appel
+  // qui précise sa devise (une opération en dollars, par exemple) n'est
+  // jamais reconverti.
+  const explicit = typeof currency === 'string';
+  const target = explicit ? currency : displayCurrency();
+
+  let n = typeof value === 'string' ? Number(value) : value;
   if (!isNum(n)) return UNKNOWN;
+  if (!explicit) n = fromBase(n);
 
   const abs = Math.abs(n);
   let min = decimals, max = decimals;
@@ -43,7 +52,7 @@ export function money(value, {
 
   return nf(locale, {
     style: 'currency',
-    currency,
+    currency: target,
     minimumFractionDigits: min,
     maximumFractionDigits: max,
     notation: compact && abs >= 100000 ? 'compact' : 'standard',
