@@ -15,7 +15,7 @@
  * Rien n'est mis en cache pour les requêtes authentifiées, même en lecture.
  */
 
-const VERSION = 'wallet-v1.0.2';
+const VERSION = 'wallet-v1.0.3';
 const SHELL = `${VERSION}-shell`;
 
 const SHELL_ASSETS = [
@@ -27,6 +27,7 @@ const SHELL_ASSETS = [
   './css/components.css',
   './js/main.js',
   './js/config.js',
+  './js/lib/currency.js',
   // Les écrans sont chargés à la demande par le routeur ; on les met malgré
   // tout dans la coquille, sinon un premier lancement hors connexion
   // n'afficherait que l'accueil.
