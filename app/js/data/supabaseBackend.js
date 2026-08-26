@@ -168,6 +168,19 @@ export const supabaseBackend = {
       .eq('user_id', user.id).select().single(), 'updateSettings');
   },
 
+  /** Taux de change du jour, base euro : { USD: 1.1669 }. */
+  async getFxRates() {
+    const sb = await getClient();
+    const rows = unwrap(await sb.from('fx_rates')
+      .select('quote, rate, day').eq('base', 'EUR')
+      .order('day', { ascending: false }).limit(40), 'getFxRates');
+    const out = {};
+    for (const row of rows || []) {
+      if (out[row.quote] === undefined) out[row.quote] = Number(row.rate);
+    }
+    return out;
+  },
+
   async seedDefaults() {
     const sb = await getClient();
     return unwrap(await sb.rpc('seed_user_defaults'), 'seedDefaults');
