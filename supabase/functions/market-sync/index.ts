@@ -18,6 +18,7 @@
 import {
   preflight, json, fail, serviceClient, fetchJson, claimSlot, finishSlot, chunk,
 } from '../_shared/http.ts';
+import { dailyHistoryEur, okxSpotPrices } from '../_shared/marketdata.ts';
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';
 const FEAR_GREED = 'https://api.alternative.me/fng/?limit=1';
@@ -105,48 +106,77 @@ Deno.serve(async (request) => {
     if (quoteError) throw new Error(`asset_quotes : ${quoteError.message}`);
     report.quotes = quoteRows.length;
 
-    /* — 3. Historique ————————————————————————————
-       Un appel par actif : on ne le fait que pour les actifs suivis par au
-       moins un utilisateur, et seulement s'ils sont périmés. Rapatrier 400
-       jours pour 100 actifs à chaque passage épuiserait le quota en une
-       heure — et n'apporterait rien.                                        */
+    /* — 3. Actifs détenus hors des cent premières capitalisations ————
+       Les altcoins récents ne figurent pas dans le classement CoinGecko.
+       Sans cotation ils valaient zéro dans le patrimoine, ce qui est pire
+       qu'une valeur approximative : c'est une valeur fausse et silencieuse.
+       OKX les cote tous, en un seul appel.                                  */
+    const { data: fxRow } = await service.from('fx_rates')
+      .select('rate').eq('base', 'EUR').eq('quote', 'USD')
+      .order('day', { ascending: false }).limit(1).maybeSingle();
+    const usdToEur = fxRow?.rate ? 1 / Number(fxRow.rate) : null;
+
+    try {
+      const { data: orphans } = await service.from('assets')
+        .select('id, symbol').neq('source', 'coingecko').eq('kind', 'crypto');
+
+      if (orphans?.length) {
+        const spot = await okxSpotPrices();
+        const rows = [];
+        for (const asset of orphans) {
+          const entry = spot.get(asset.symbol.toUpperCase());
+          const price = entry?.eur
+            ?? (Number.isFinite(usdToEur) && entry?.usd ? entry.usd * (usdToEur as number) : null);
+          if (price === null) continue;
+          rows.push({
+            asset_id: asset.id, currency: 'EUR', price,
+            fetched_at: new Date().toISOString(),
+            stale_after: new Date(Date.now() + MIN_INTERVAL_SECONDS * 2000).toISOString(),
+          });
+        }
+        if (rows.length) {
+          await service.from('asset_quotes').upsert(rows, { onConflict: 'asset_id' });
+          report.quotes += rows.length;
+        }
+        const priced = new Set(rows.map((r) => r.asset_id));
+        const unpriced = orphans.filter((a) => !priced.has(a.id)).map((a) => a.symbol);
+        if (unpriced.length) {
+          report.warnings.push(`Sans cotation : ${unpriced.join(', ')}.`);
+        }
+      }
+    } catch {
+      report.warnings.push('Cotation des actifs hors classement indisponible.');
+    }
+
+    /* — 4. Historique ————————————————————————————
+       Une bougie journalière par actif suivi, depuis les marchés publics des
+       exchanges. Le plafond par passage évite de dépasser le temps d'exécution
+       d'une fonction ; les actifs restants sont traités au passage suivant.  */
     const followed = await followedAssets(service);
     let historyCalls = 0;
 
     for (const asset of followed) {
-      if (historyCalls >= 8) {
-        report.warnings.push('Historique : quota d’appels atteint, la suite au prochain passage.');
+      if (historyCalls >= 12) {
+        report.warnings.push('Historique : suite au prochain passage.');
         break;
       }
       if (!(await needsHistory(service, asset.id))) continue;
+      historyCalls += 1;
 
-      try {
-        const chart = await fetchJson(
-          `${COINGECKO}/coins/${asset.external_id}/market_chart`
-          + `?vs_currency=eur&days=${HISTORY_DAYS}&interval=daily`,
-          { headers: { accept: 'application/json' } },
-          { label: 'CoinGecko (historique)', retries: 1 },
-        ) as { prices?: Array<[number, number]> };
-
-        const rows = (chart.prices ?? []).map(([timestamp, close]) => ({
-          asset_id: asset.id,
-          currency: 'EUR',
-          day: new Date(timestamp).toISOString().slice(0, 10),
-          close,
-        }));
-
-        for (const batch of chunk(rows, 500)) {
-          await service.from('price_history')
-            .upsert(batch, { onConflict: 'asset_id,currency,day' });
-        }
-        report.history += rows.length;
-        historyCalls += 1;
-
-        // Espacement volontaire entre deux appels : c'est ce qui évite le 429.
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-      } catch (error) {
+      const candles = await dailyHistoryEur(asset.symbol, HISTORY_DAYS, usdToEur);
+      if (!candles.length) {
         report.warnings.push(`Historique ${asset.symbol} indisponible.`);
+        continue;
       }
+
+      const rows = candles.map((c) => ({
+        asset_id: asset.id, currency: 'EUR', day: c.day, close: c.close,
+      }));
+      for (const batch of chunk(rows, 500)) {
+        await service.from('price_history')
+          .upsert(batch, { onConflict: 'asset_id,currency,day' });
+      }
+      report.history += rows.length;
     }
 
     /* — 4. Fear & Greed ————————————————————————— */
@@ -246,8 +276,10 @@ async function followedAssets(service: ReturnType<typeof serviceClient>) {
 
   if (!ids.size) return core ?? [];
 
+  // Pas de filtre sur la source : un actif ajouté par une synchronisation
+  // d'exchange mérite le même historique qu'un actif du classement.
   const { data: assets } = await service.from('assets')
-    .select('id, symbol, external_id').in('id', [...ids]).eq('source', 'coingecko');
+    .select('id, symbol, external_id').in('id', [...ids]);
   return assets ?? [];
 }
 
