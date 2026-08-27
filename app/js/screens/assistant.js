@@ -7,6 +7,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { openSheet } from '../lib/sheet.js';
 import { navigate } from '../lib/router.js';
 import { feedback } from '../lib/feedback.js';
@@ -54,7 +55,7 @@ function buildPanel(close, initialQuestion) {
   },
     h('div.field', { style: { flex: '1', margin: '0' } }, input),
     h('button.btn.btn--primary', { type: 'submit', 'data-sound': 'select',
-      style: { minWidth: '56px', padding: '0 18px' }, 'aria-label': 'Envoyer' }, '↑'),
+      style: { minWidth: '56px', padding: '0 18px' }, 'aria-label': 'Envoyer' }, glyph('arrowUp')),
   );
 
   mount(container,
