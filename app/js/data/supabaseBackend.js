@@ -183,6 +183,14 @@ export const supabaseBackend = {
     return data;
   },
 
+  async lastTransactionDate() {
+    const sb = await getClient();
+    const row = unwrap(await sb.from('bank_transactions')
+      .select('booked_at').order('booked_at', { ascending: false })
+      .limit(1).maybeSingle(), 'lastTransactionDate');
+    return row?.booked_at ?? null;
+  },
+
   async getFxRates() {
     const sb = await getClient();
     const rows = unwrap(await sb.from('fx_rates')
