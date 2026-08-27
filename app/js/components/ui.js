@@ -8,6 +8,7 @@
  */
 
 import { h, icon, mount } from '../lib/dom.js';
+import { glyph } from './icons.js';
 import { money, pct, ago, trendClass, trendArrow, UNKNOWN } from '../lib/fmt.js';
 import { config } from '../config.js';
 import { displayCurrency, cycleCurrency, canDisplay, onCurrencyChange } from '../lib/currency.js';
@@ -133,7 +134,7 @@ export function partialNotice(unknown = [], { onFix = null } = {}) {
   if (!unknown.length) return null;
   const names = unknown.map((u) => u.label).filter(Boolean).slice(0, 3).join(', ');
   return h('div.notice.notice--warn',
-    h('span', '⚠️'),
+    h('span', glyph('alert')),
     h('div',
       h('strong', 'Total partiel'),
       `Le solde de ${names}${unknown.length > 3 ? ` et ${unknown.length - 3} autre(s)` : ''} n'est pas connu. Il n'est pas compté comme 0 €.`,
@@ -162,7 +163,7 @@ export function loadingBlock(height = 140) {
   return h('div.skeleton', { style: { height: `${height}px`, borderRadius: 'var(--r-lg)' } });
 }
 
-export function emptyState({ emoji = '🗂️', title, body, action = null }) {
+export function emptyState({ emoji = glyph('folder'), title, body, action = null }) {
   return h('div.empty',
     h('div.empty__emoji', emoji),
     h('div.empty__title', title),
@@ -177,7 +178,7 @@ export function emptyState({ emoji = '🗂️', title, body, action = null }) {
  */
 export function errorState(error, { onRetry = null, what = 'ces données' } = {}) {
   return h('div.notice.notice--danger',
-    h('span', '⚠️'),
+    h('span', glyph('alert')),
     h('div',
       h('strong', `Impossible de charger ${what}`),
       error?.message || 'La source est momentanément indisponible.',
@@ -284,7 +285,7 @@ export function accordion(title, buildBody, { open = false } = {}) {
 /** Bandeau du mode démonstration : dire clairement ce qui est simulé (§51). */
 export function demoBanner() {
   return h('div.notice', { style: { marginBottom: '16px' } },
-    h('span', '🧪'),
+    h('span', glyph('flask')),
     h('div',
       h('strong', 'Mode démonstration'),
       'Les prix et les transactions affichés sont simulés. Connectez votre serveur Supabase et vos comptes depuis Profil pour voir vos vraies données.',
