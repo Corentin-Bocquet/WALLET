@@ -10,6 +10,7 @@
 import { h, icon, mount } from '../lib/dom.js';
 import { money, pct, ago, trendClass, trendArrow, UNKNOWN } from '../lib/fmt.js';
 import { config } from '../config.js';
+import { displayCurrency, cycleCurrency, canDisplay, onCurrencyChange } from '../lib/currency.js';
 import { back } from '../lib/router.js';
 import { explainChip } from './explain.js';
 
@@ -59,7 +60,7 @@ export function seeAll(label, onClick) {
  */
 export function bigAmount(value, {
   label,
-  currency = config.defaultCurrency,
+  currency,
   change = null,
   changePct = null,
   changeLabel = null,
@@ -73,7 +74,7 @@ export function bigAmount(value, {
     h('div.display.sensitive', {
       style: { marginTop: '6px' },
       class: known ? '' : 'unknown',
-    }, known ? money(value, { currency }) : UNKNOWN),
+    }, known ? money(value, currency ? { currency } : {}) : UNKNOWN),
 
     !known && unknownHint
       ? h('div.muted-2', { style: { fontSize: 'var(--fs-sm)', marginTop: '6px' } }, unknownHint)
@@ -84,7 +85,7 @@ export function bigAmount(value, {
           style: { marginTop: '8px', fontWeight: '600' },
           class: trendClass(changePct ?? change),
         },
-        Number.isFinite(change) ? money(change, { currency, sign: true }) : null,
+        Number.isFinite(change) ? money(change, currency ? { currency, sign: true } : { sign: true }) : null,
         Number.isFinite(change) && Number.isFinite(changePct) ? ' ' : null,
         Number.isFinite(changePct) ? `(${pct(changePct)})` : null,
         changeLabel ? h('span.muted', { style: { fontWeight: '500' } }, ` ${changeLabel}`) : null,
@@ -292,3 +293,52 @@ export function demoBanner() {
 }
 
 export { money, pct, UNKNOWN };
+
+
+/* — Interrupteur euro / dollar ————————————————————————— */
+
+/**
+ * Bascule la devise d'affichage. Volontairement limité à l'euro et au dollar :
+ * ce sont les deux seules devises qu'on veut comparer d'un coup d'œil. Les
+ * autres se choisissent dans les préférences, où l'on prend le temps.
+ *
+ * Une devise dont le taux est inconnu rend l'interrupteur inactif plutôt que
+ * de laisser convertir avec un taux inventé (§46).
+ */
+export function currencyToggle({ compact = false } = {}) {
+  const paint = (root) => {
+    const active = displayCurrency();
+    const usable = canDisplay('USD');
+    root.replaceChildren(
+      h('span.ccy-switch__opt', { class: active === 'EUR' ? 'is-on' : '' }, '€'),
+      h('span.ccy-switch__opt', { class: active === 'USD' ? 'is-on' : '' }, '$'),
+      h('span.ccy-switch__knob', { style: { transform: active === 'USD' ? 'translateX(100%)' : 'none' } }),
+    );
+    root.setAttribute('aria-label', `Afficher en ${active === 'EUR' ? 'euros' : 'dollars'}`);
+    root.disabled = !usable;
+    root.title = usable ? 'Basculer euro / dollar' : 'Taux de change indisponible';
+  };
+
+  const root = h('button.ccy-switch', {
+    type: 'button',
+    'data-sound': 'toggle',
+    class: compact ? 'ccy-switch--compact' : '',
+    onclick: () => { cycleCurrency(1); },
+  });
+
+  paint(root);
+  const stop = onCurrencyChange(() => paint(root));
+  // Le routeur remplace le DOM à chaque rendu : on se désabonne quand
+  // l'élément quitte la page, sinon les écouteurs s'accumulent.
+  if (typeof MutationObserver !== 'undefined') {
+    queueMicrotask(() => {
+      const observer = new MutationObserver(() => {
+        if (!root.isConnected) { stop(); observer.disconnect(); }
+      });
+      if (root.ownerDocument?.body) {
+        observer.observe(root.ownerDocument.body, { childList: true, subtree: true });
+      }
+    });
+  }
+  return root;
+}
