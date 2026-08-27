@@ -301,7 +301,7 @@ function renderAccounts(accounts, holdings = []) {
   }
 
   return h('div.rows', accounts.map((account) => h('div.row',
-    h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
+    brandLogo(account.provider, 40) ?? h('div.avatar', { style: { background: 'var(--surface-2)' } },
       ({ bank: glyph('bank'), exchange: glyph('coin'), broker: glyph('trendUp'), cash: glyph('cash'), manual: glyph('pen') })[account.kind] ?? glyph('box')),
     h('div.row__main',
       h('div.row__title', account.label),
