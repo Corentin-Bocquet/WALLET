@@ -131,6 +131,7 @@ export const updateSettings = async (patch) => {
 };
 export const seedDefaults = () => backend.seedDefaults?.();
 export const getFxRates = () => cached('fx', 30 * MIN, () => backend.getFxRates?.() ?? {});
+export const lastTransactionDate = () => backend.lastTransactionDate?.() ?? Promise.resolve(null);
 export const askAssistant = (question) => backend.askAssistant?.(question);
 export const categorizeWithAI = async () => {
   const result = await backend.categorizeWithAI?.();
