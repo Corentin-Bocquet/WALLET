@@ -202,15 +202,40 @@ async function loadMonth() {
   const now = new Date();
   const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
     .toISOString().slice(0, 10);
-  const [current, previous] = await Promise.all([
+  const [current, previous, lastKnown] = await Promise.all([
     repo.monthlySummary(),
     repo.monthlySummary(previousMonth),
+    repo.lastTransactionDate?.().catch(() => null) ?? null,
   ]);
-  return { current, previous };
+  return { current, previous, lastKnown };
 }
 
-function renderMonth({ current, previous }) {
+function renderMonth({ current, previous, lastKnown }) {
   if (!current) return emptyState({ emoji: glyph('receipt'), title: 'Aucune donnée bancaire' });
+
+  // Un mois sans AUCUNE opération n'est pas un mois à zéro euro : c'est un
+  // mois qu'on ne connaît pas. Afficher « 0 € » et « -100 % » donnerait un
+  // chiffre faux avec assurance (§46).
+  const operations = Number(current.count ?? current.operations ?? 0);
+  const hasData = operations > 0 || Number(current.expense) !== 0 || Number(current.income) !== 0;
+
+  if (!hasData) {
+    const monthName = new Date().toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' });
+    return h('div.card',
+      h('div.eyebrow', glyph('receipt'), ' Ce mois-ci'),
+      h('div', { style: { marginTop: '8px', fontSize: '20px', fontWeight: '600' } },
+        `Aucune opération en ${monthName}`),
+      h('p.muted', { style: { marginTop: '6px', fontSize: 'var(--fs-sm)' } },
+        lastKnown
+          ? `Votre dernier relevé s’arrête au ${fmtDay(lastKnown, { long: true })}. `
+            + 'Importez le suivant pour retrouver vos dépenses du mois.'
+          : 'Importez un relevé depuis Profil → Comptes pour commencer.'),
+      h('button.btn.btn--primary', {
+        type: 'button', style: { marginTop: '16px' },
+        onclick: () => navigate('/profil/comptes'),
+      }, 'Importer un relevé'),
+    );
+  }
 
   const expense = Number(current.expense);
   const income = Number(current.income);
