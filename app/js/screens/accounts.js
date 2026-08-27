@@ -13,6 +13,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { brandLogo } from '../components/brand.js';
 import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
@@ -69,7 +70,7 @@ export async function accountsScreen() {
             type: 'button', 'data-sound': 'sheetOpen',
             onclick: () => editAccount(account, paint),
           },
-            h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
+            brandLogo(account.provider, 40) ?? h('div.avatar', { style: { background: 'var(--surface-2)' } },
               ({ bank: glyph('bank'), exchange: glyph('coin'), broker: glyph('trendUp'), cash: glyph('cash'), manual: glyph('pen') })[account.kind] ?? glyph('box')),
             h('div.row__main',
               h('div.row__title', account.label),
