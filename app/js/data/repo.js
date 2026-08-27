@@ -131,6 +131,14 @@ export const updateSettings = async (patch) => {
 };
 export const seedDefaults = () => backend.seedDefaults?.();
 export const getFxRates = () => cached('fx', 30 * MIN, () => backend.getFxRates?.() ?? {});
+export const askAssistant = (question) => backend.askAssistant?.(question);
+export const categorizeWithAI = async () => {
+  const result = await backend.categorizeWithAI?.();
+  // Le classement change les catégories : sans purge du cache, l'écran
+  // continuerait d'afficher « aucune dépense classée ».
+  invalidate('transactions'); invalidate('month'); invalidate('categories');
+  return result;
+};
 
 /* ================================================================== */
 /* Marché                                                              */
