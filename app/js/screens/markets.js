@@ -7,6 +7,7 @@
  */
 
 import { h, mount, icon } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
@@ -93,7 +94,7 @@ export async function marketsScreen() {
 
       if (!rows.length) {
         mount(list, emptyState({
-          emoji: activeTab === 'watch' ? '⭐️' : '🔍',
+          emoji: activeTab === 'watch' ? glyph('star') : glyph('search'),
           title: activeTab === 'watch' ? 'Votre liste est vide' : 'Aucun résultat',
           body: activeTab === 'watch'
             ? 'Ouvrez une crypto et touchez l’étoile pour la suivre ici.'
@@ -191,7 +192,7 @@ export async function assetScreen({ params }) {
 
   if (!asset) {
     screen.append(subScreenHead('Actif introuvable'));
-    screen.append(emptyState({ emoji: '🤷', title: 'Cet actif n’existe pas', body: 'Il a peut-être été retiré du suivi.' }));
+    screen.append(emptyState({ emoji: glyph('question'), title: 'Cet actif n’existe pas', body: 'Il a peut-être été retiré du suivi.' }));
     return screen;
   }
 
@@ -231,7 +232,7 @@ export async function assetScreen({ params }) {
         toast('Impossible de modifier votre liste.', { kind: 'error' });
       }
     },
-  }, '★');
+  }, glyph('star'));
 
   screen.append(subScreenHead(asset.name, { right: star }));
 
@@ -334,7 +335,7 @@ async function renderScoreAndIndicators({ asset, scoreHost, indicatorsHost, adva
 
     if (!computed.available) {
       mount(scoreHost, h('div.notice',
-        h('span', 'ℹ️'),
+        h('span', 'ℹ'),
         h('div', h('strong', 'Score indisponible'),
           `Il faut plus d'historique de prix pour calculer un score (${computed.points ?? 0} points connus).`)));
       mount(indicatorsHost, h('p.muted', 'Les indicateurs apparaîtront avec plus d’historique.'));
@@ -395,7 +396,7 @@ export function scoreCard(asset, result, model) {
 
     result.confidence < 0.75
       ? h('div.notice.notice--warn', { style: { marginTop: '14px' } },
-          h('span', '⚠️'),
+          h('span', glyph('alert')),
           h('div', h('strong', 'Score partiel'),
             `${Math.round(result.confidence * 100)} % des facteurs sont renseignés. Les facteurs manquants ne sont pas remplacés par une valeur neutre : ils sont retirés du calcul.`))
       : null,
