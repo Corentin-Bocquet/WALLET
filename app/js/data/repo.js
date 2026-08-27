@@ -185,7 +185,18 @@ export async function getNetWorth() {
 
   for (const account of accounts) {
     if (!account.include_in_net_worth || account.is_active === false) continue;
-    if (account.kind === 'exchange') continue;        // valorisé via les holdings
+
+    // Un compte d'exchange est valorisé par ses positions POUR LES CRYPTOS,
+    // mais les euros et dollars laissés sur la plateforme ne sont pas des
+    // positions. Sans cette ligne ils disparaissaient du total : c'est
+    // exactement ce qui manquait aux dollars laissés sur Kraken.
+    if (account.kind === 'exchange') {
+      if (account.balance !== null && account.balance !== undefined) {
+        cash += Number(account.balance);
+      }
+      continue;
+    }
+
     if (account.balance === null || account.balance === undefined) {
       unknownAccounts.push(account);
       continue;
