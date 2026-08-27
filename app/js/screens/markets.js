@@ -11,7 +11,7 @@ import { navigate } from '../lib/router.js';
 import { openSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import {
-  screenHead, subScreenHead, section, bigAmount, freshness, loadingRows,
+  screenHead, subScreenHead, section, bigAmount, freshness, loadingRows, currencyToggle,
   emptyState, asyncBlock, badge, changeBadge, estimateBadge, accordion, errorState,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo, showReasoning } from '../components/explain.js';
@@ -31,7 +31,7 @@ const TABS = [
 
 export async function marketsScreen() {
   const screen = h('main.screen');
-  screen.append(screenHead('Marchés'));
+  screen.append(screenHead('Marchés', { right: currencyToggle() }));
 
   /* Baromètre du marché : deux chiffres, pas un tableau de bord. */
   const barometer = h('div');
@@ -202,14 +202,34 @@ export async function assetScreen({ params }) {
   let watched = watchlist.some((a) => a.id === asset.id);
   const advanced = settings.ui_mode === 'advanced';
 
+  // L'étoile change de couleur AVANT l'aller-retour serveur : un favori est
+  // une intention, pas une transaction. Si le serveur refuse, on revient en
+  // arrière et on le dit — plutôt que de laisser l'étoile figée sans un mot.
+  const paintStar = (button, on) => {
+    button.style.color = on ? 'var(--accent)' : 'var(--text-2)';
+    button.setAttribute('aria-pressed', String(on));
+    button.setAttribute('aria-label', on ? 'Retirer de ma liste' : 'Ajouter à ma liste');
+  };
+
   const star = h('button.icon-btn', {
     type: 'button', 'data-sound': 'toggle',
+    'aria-pressed': String(watched),
     'aria-label': watched ? 'Retirer de ma liste' : 'Ajouter à ma liste',
-    style: { color: watched ? 'var(--accent)' : 'var(--text-2)' },
+    style: { color: watched ? 'var(--accent)' : 'var(--text-2)', transition: 'color .15s ease' },
     onclick: async (event) => {
-      watched = await repo.toggleWatchlist(asset.id);
-      event.currentTarget.style.color = watched ? 'var(--accent)' : 'var(--text-2)';
-      toast(watched ? `${asset.symbol} ajouté à votre liste` : `${asset.symbol} retiré`);
+      const button = event.currentTarget;
+      const previous = watched;
+      watched = !previous;
+      paintStar(button, watched);
+      try {
+        watched = await repo.toggleWatchlist(asset.id);
+        paintStar(button, watched);
+        toast(watched ? `${asset.symbol} ajouté à votre liste` : `${asset.symbol} retiré`);
+      } catch (error) {
+        watched = previous;
+        paintStar(button, watched);
+        toast('Impossible de modifier votre liste.', { kind: 'error' });
+      }
     },
   }, '★');
 
