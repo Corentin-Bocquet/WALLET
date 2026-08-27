@@ -231,6 +231,19 @@ export const demoBackend = {
     return { ...(await this.getProfile()), ...persisted.settings.profile };
   },
 
+  async askAssistant() {
+    return {
+      ok: false,
+      answer: 'L’assistant a besoin de votre serveur Supabase. Connectez-le depuis '
+        + 'Profil pour poser des questions sur vos vraies données.',
+      evidence: [],
+    };
+  },
+
+  async categorizeWithAI() {
+    return { ok: false, classified: 0, message: 'Indisponible en mode démonstration.' };
+  },
+
   /** Taux figé : le mode démonstration n'appelle aucun service extérieur. */
   async getFxRates() {
     return { USD: 1.09 };
