@@ -169,3 +169,14 @@ body[data-blur="on"] .sensitive:active { filter: blur(0); }
 }
 .hscroll::-webkit-scrollbar { display: none; }
 .hscroll > * { scroll-snap-align: start; flex: 0 0 auto; }
+
+
+/* — Débordement de texte ——————————————————————————————————
+   Sans cela, un message d'erreur contenant une longue chaîne sans espace
+   élargissait la page au-delà de l'écran : sur iPhone, l'application
+   semblait alors zoomée et ne revenait jamais à sa taille. */
+body, .card, .row, .rows, p, li, .badge { min-width: 0; }
+p, li, .card, .badge, .row__title, .row__sub, .row__value {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
