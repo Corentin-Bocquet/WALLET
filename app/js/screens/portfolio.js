@@ -3,6 +3,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { assetAvatar, accountBadge, brandLogo } from '../components/brand.js';
 import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
@@ -13,7 +14,7 @@ import {
 } from '../components/ui.js';
 import { explainChip } from '../components/explain.js';
 import { areaChart, bubbleChart, barList } from '../components/chart.js';
-import { money, pct, num, day as fmtDay, trendClass } from '../lib/fmt.js';
+import { money, pct, num, day as fmtDay, trendClass, UNKNOWN } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import { analyseBehaviour } from '../engine/behaviour.js';
 
@@ -179,21 +180,55 @@ async function renderPositions(host) {
       return;
     }
 
-    mount(host, h('div.rows', holdings.map((holding) => h('button.row', {
+    // Une même crypto détenue sur deux plateformes est UNE ligne, avec les
+    // comptes en pastilles. Deux lignes « SOL » l'une sous l'autre obligeaient
+    // à faire l'addition de tête, ce qui est exactement le travail que
+    // l'application est censée faire.
+    const merged = new Map();
+    for (const holding of holdings) {
+      if (!Number(holding.quantity)) continue;
+      const key = holding.symbol || holding.asset_id;
+      const entry = merged.get(key) ?? {
+        symbol: holding.symbol,
+        name: holding.name || holding.symbol,
+        asset: holding.asset ?? { symbol: holding.symbol, image_url: holding.image_url },
+        quantity: 0,
+        value: 0,
+        valueKnown: false,
+        parts: [],
+      };
+      entry.quantity += Number(holding.quantity) || 0;
+      if (Number.isFinite(holding.value)) { entry.value += holding.value; entry.valueKnown = true; }
+      entry.parts.push(holding);
+      merged.set(key, entry);
+    }
+
+    const lines = [...merged.values()].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+
+    mount(host, h('div.rows', lines.map((line) => h('button.row', {
       type: 'button', 'data-sound': 'sheetOpen',
-      onclick: () => openHolding(holding),
+      onclick: () => openMergedHolding(line),
     },
-      h('div.avatar', { style: { background: 'var(--surface-2)', fontWeight: '700', fontSize: '13px' } },
-        holding.symbol?.slice(0, 3) ?? '?'),
+      assetAvatar(line.asset ?? { symbol: line.symbol }),
       h('div.row__main',
-        h('div.row__title', holding.name || holding.symbol),
-        h('div.row__sub', `${num(holding.quantity)} ${holding.symbol}`),
+        h('div.row__title', line.name),
+        h('div.row__sub', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+          h('span', `${num(line.quantity)} ${line.symbol}`),
+          line.parts.length > 1
+            ? h('span.acct-badges',
+                line.parts.map((p) => accountBadge(
+                  p.account?.label ?? p.account_label ?? 'Compte',
+                  p.account?.provider ?? p.provider)))
+            : null,
+        ),
       ),
       h('div.row__end',
-        h('div.row__value.sensitive', money(holding.value)),
-        Number.isFinite(holding.pnl_pct)
-          ? h('div.row__sub', { class: trendClass(holding.pnl_pct) }, pct(holding.pnl_pct))
-          : h('div.row__sub.unknown', 'prix de revient inconnu'),
+        h('div.row__value.sensitive', line.valueKnown ? money(line.value) : UNKNOWN),
+        line.parts.length > 1
+          ? h('div.row__sub.muted-2', `${line.parts.length} comptes`)
+          : (Number.isFinite(line.parts[0]?.pnl_pct)
+              ? h('div.row__sub', { class: trendClass(line.parts[0].pnl_pct) }, pct(line.parts[0].pnl_pct))
+              : h('div.row__sub.unknown', 'prix de revient inconnu')),
       ),
     ))));
   } catch (error) {
@@ -418,5 +453,41 @@ function openAddHolding() {
           style: { marginTop: '12px' } }, 'Ajouter'),
       );
     },
+  });
+}
+
+
+/**
+ * Détail d'une position regroupée : combien sur chaque compte.
+ * C'est la contrepartie du regroupement — on ne cache pas l'information,
+ * on la range d'un cran.
+ */
+function openMergedHolding(line) {
+  if (line.parts.length === 1) { openHolding(line.parts[0]); return; }
+
+  openSheet({
+    title: line.name,
+    build: () => h('div',
+      bigAmount(line.valueKnown ? line.value : null, {
+        label: `${num(line.quantity)} ${line.symbol}`,
+      }),
+      h('div.rows', { style: { marginTop: '20px' } },
+        line.parts.map((part) => h('button.row', {
+          type: 'button', 'data-sound': 'sheetOpen',
+          onclick: () => openHolding(part),
+        },
+          brandLogo(part.account?.provider ?? part.provider, 32)
+            ?? assetAvatar({ symbol: (part.account?.label ?? '?') }, 32),
+          h('div.row__main',
+            h('div.row__title', part.account?.label ?? 'Compte'),
+            h('div.row__sub', `${num(part.quantity)} ${line.symbol}`),
+          ),
+          h('div.row__end',
+            h('div.row__value.sensitive',
+              Number.isFinite(part.value) ? money(part.value) : UNKNOWN),
+          ),
+        )),
+      ),
+    ),
   });
 }
