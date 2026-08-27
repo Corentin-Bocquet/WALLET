@@ -6,6 +6,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
@@ -96,7 +97,7 @@ async function renderAll(hosts) {
 
   if (!scored.length) {
     mount(hosts.zones, emptyState({
-      emoji: '📉', title: 'Pas assez d’historique',
+      emoji: glyph('trendDown'), title: 'Pas assez d’historique',
       body: 'Les zones apparaîtront une fois les prix historiques synchronisés.',
     }));
   } else {
@@ -169,7 +170,7 @@ async function renderScenarios(host, btc) {
 
     if (!projection.available) {
       mount(host, h('div.notice',
-        h('span', 'ℹ️'),
+        h('span', 'ℹ'),
         h('div', h('strong', 'Projection indisponible'), projection.reason)));
       return;
     }
@@ -204,7 +205,7 @@ async function renderScenarios(host, btc) {
         ))),
 
       h('div.notice', { style: { marginTop: '18px' } },
-        h('span', '📐'),
+        h('span', glyph('ruler')),
         h('div',
           h('strong', 'Comment c’est calculé'),
           `Base : ${money(projection.basis, { decimals: 0 })}, la ${projection.basis_label}. Chaque scénario applique un multiple que vous fixez. ${projection.disclaimer}`)),
@@ -272,7 +273,7 @@ async function renderAlts(host, btc, assets) {
 
           rows.length
             ? h('div.notice.notice--warn', { style: { marginTop: '16px' } },
-                h('span', '⚠️'),
+                h('span', glyph('alert')),
                 h('div',
                   h('strong', 'Ce que ce calcul ne dit pas'),
                   h('ul', { style: { margin: '6px 0 0', paddingLeft: '18px' } },
@@ -295,7 +296,7 @@ async function renderBacktest(host, btc, model) {
     const comparison = compareStrategies(history, { amount: 100, cadence: 'monthly', model });
 
     if (!comparison.runs.length) {
-      mount(host, h('div.notice', h('span', 'ℹ️'),
+      mount(host, h('div.notice', h('span', 'ℹ'),
         h('div', h('strong', 'Simulation impossible'), 'Historique de prix trop court.')));
       return;
     }
@@ -329,7 +330,7 @@ async function renderBacktest(host, btc, model) {
         )))),
 
       h('div.notice', { style: { marginTop: '16px' } },
-        h('span', '🔒'),
+        h('span', glyph('lock')),
         h('div',
           h('strong', 'Aucune donnée future n’est utilisée'),
           'Chaque décision de la simulation est prise avec les seules données disponibles à sa date. C’est vérifié par un test automatique qui injecte une valeur aberrante dans le futur : le résultat ne bouge pas.')),
