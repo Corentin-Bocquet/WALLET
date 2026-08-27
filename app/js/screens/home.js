@@ -7,6 +7,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet } from '../lib/sheet.js';
 import {
@@ -36,7 +37,7 @@ export async function homeScreen() {
         h('button.icon-btn', {
         type: 'button', 'aria-label': 'Demander à mon patrimoine',
         'data-sound': 'sheetOpen', onclick: () => openAssistant(),
-      }, '💬')),
+      }, glyph('chat'))),
     }),
   );
 
@@ -66,7 +67,7 @@ export async function homeScreen() {
       onSelect: (item) => navigate(`/banque?categorie=${item.category_id ?? ''}`),
     }),
     empty: () => emptyState({
-      emoji: '🧾',
+      emoji: glyph('receipt'),
       title: 'Aucune dépense ce mois-ci',
       body: 'Importez un relevé depuis Profil → Comptes pour commencer.',
     }),
@@ -94,7 +95,7 @@ async function renderHero(host) {
 
   if (netWorth.error) {
     mount(host, h('div.notice.notice--danger',
-      h('span', '⚠️'),
+      h('span', glyph('alert')),
       h('div', h('strong', 'Patrimoine indisponible'),
         'Impossible de calculer votre patrimoine pour le moment.')));
     return;
@@ -161,8 +162,8 @@ async function renderHero(host) {
       // Décomposition : trois tuiles, pas un tableau (§5)
       h('div.hscroll', { style: { marginTop: '20px' } },
         splitTile('Crypto', netWorth.crypto, '₿', () => navigate('/portefeuille')),
-        splitTile('Liquidités', netWorth.cash, '💶', () => navigate('/portefeuille')),
-        netWorth.equity > 0 ? splitTile('Actions', netWorth.equity, '📈', () => navigate('/portefeuille')) : null,
+        splitTile('Liquidités', netWorth.cash, glyph('cash'), () => navigate('/portefeuille')),
+        netWorth.equity > 0 ? splitTile('Actions', netWorth.equity, glyph('trendUp'), () => navigate('/portefeuille')) : null,
       ),
     );
   };
@@ -209,7 +210,7 @@ async function loadMonth() {
 }
 
 function renderMonth({ current, previous }) {
-  if (!current) return emptyState({ emoji: '🧾', title: 'Aucune donnée bancaire' });
+  if (!current) return emptyState({ emoji: glyph('receipt'), title: 'Aucune donnée bancaire' });
 
   const expense = Number(current.expense);
   const income = Number(current.income);
@@ -321,7 +322,7 @@ async function renderInsights(host) {
 
   if (!cards.length) {
     mount(host, emptyState({
-      emoji: '✅',
+      emoji: glyph('checkCircle'),
       title: 'Rien à signaler',
       body: 'Aucune dépense inhabituelle ni dérive détectée sur la période.',
     }));
@@ -332,7 +333,7 @@ async function renderInsights(host) {
 }
 
 function insightCard(insight) {
-  const tone = { warning: '⚠️', danger: '🔴', success: '✅', info: '💡' }[insight.severity] || '💡';
+  const tone = { warning: glyph('alert'), danger: glyph('dot'), success: glyph('checkCircle'), info: glyph('bulb') }[insight.severity] || glyph('bulb');
 
   return h('button.card.card--tap', {
     type: 'button', 'data-sound': 'sheetOpen',
