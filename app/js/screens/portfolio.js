@@ -7,7 +7,7 @@ import { navigate } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import {
-  screenHead, section, bigAmount, freshness, partialNotice, loadingRows,
+  screenHead, section, bigAmount, freshness, partialNotice, loadingRows, currencyToggle,
   loadingBlock, emptyState, asyncBlock, errorState, badge, seeAll,
 } from '../components/ui.js';
 import { explainChip } from '../components/explain.js';
@@ -20,7 +20,9 @@ export async function portfolioScreen() {
   const screen = h('main.screen');
 
   screen.append(screenHead('Portefeuille', {
-    right: h('button.icon-btn', {
+    right: h('div.head__tools',
+      currencyToggle({ compact: true }),
+      h('button.icon-btn', {
       type: 'button', 'aria-label': 'Synchroniser', 'data-sound': 'select',
       onclick: (event) => sync(event.currentTarget),
     }, '⟳'),
@@ -249,7 +251,16 @@ function detailRow(label, value) {
   );
 }
 
-function renderAccounts(accounts) {
+function renderAccounts(accounts, holdings = []) {
+  // Un exchange détient des liquidités ET des positions. N'afficher que l'un
+  // des deux donnait un compte à « — » alors qu'il pesait plusieurs milliers.
+  const positionsByAccount = new Map();
+  for (const holding of holdings) {
+    const id = holding.account_id ?? holding.account?.id;
+    if (!id || !Number.isFinite(holding.value)) continue;
+    positionsByAccount.set(id, (positionsByAccount.get(id) ?? 0) + holding.value);
+  }
+
   return h('div.rows', accounts.map((account) => h('div.row',
     h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
       ({ bank: '🏦', exchange: '🪙', broker: '📈', cash: '💶', manual: '✍️' })[account.kind] ?? '📦'),
@@ -257,14 +268,24 @@ function renderAccounts(accounts) {
       h('div.row__title', account.label),
       h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : account.provider),
     ),
-    h('div.row__end',
-      account.balance === null || account.balance === undefined
-        ? h('div.row__value.unknown', '—')
-        : h('div.row__value.sensitive', money(Number(account.balance), { currency: account.currency })),
-      account.balance === null
-        ? h('div.row__sub.muted-2', account.kind === 'exchange' ? 'valorisé par positions' : 'solde inconnu')
-        : h('div.row__sub', freshness(account.balance_at, { prefix: '', thresholdSeconds: 86400 })),
-    ),
+    (() => {
+      const positions = positionsByAccount.get(account.id) ?? 0;
+      const cash = Number(account.balance);
+      const hasCash = Number.isFinite(cash);
+      const totalValue = (hasCash ? cash : 0) + positions;
+      const known = hasCash || positions > 0;
+
+      return h('div.row__end',
+        known
+          ? h('div.row__value.sensitive', money(totalValue))
+          : h('div.row__value.unknown', '—'),
+        positions > 0 && hasCash
+          ? h('div.row__sub.muted-2', `dont ${money(positions)} en positions`)
+          : (known
+              ? h('div.row__sub', freshness(account.balance_at, { prefix: '', thresholdSeconds: 86400 }))
+              : h('div.row__sub.muted-2', 'solde inconnu')),
+      );
+    })(),
   )));
 }
 
