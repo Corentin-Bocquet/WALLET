@@ -16,6 +16,7 @@ import { h, mount } from '../lib/dom.js';
 import { navigate } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
+import { currencyToggle } from '../components/ui.js';
 import {
   subScreenHead, section, loadingRows, emptyState, errorState, badge, freshness,
 } from '../components/ui.js';
@@ -25,7 +26,7 @@ import { parseStatement, SUPPORTED_FORMATS } from '../data/import.js';
 
 export async function accountsScreen() {
   const screen = h('main.screen');
-  screen.append(subScreenHead('Comptes et connexions'));
+  screen.append(subScreenHead('Comptes et connexions', { right: currencyToggle({ compact: true }) }));
 
   const accountsHost = h('div');
   const exchangeHost = h('div');
@@ -47,7 +48,21 @@ export async function accountsScreen() {
 
   async function paint() {
     try {
-      const accounts = await repo.getAccounts();
+      const [accounts, holdings] = await Promise.all([
+        repo.getAccounts(),
+        repo.getHoldings().catch(() => []),
+      ]);
+
+      // Positions par compte : un exchange vaut ses liquidités PLUS ses
+      // cryptos. Sans cela, OKX s'affichait sans valeur alors que ses
+      // positions pesaient plusieurs milliers d'euros.
+      const positionsByAccount = new Map();
+      for (const holding of holdings) {
+        const id = holding.account_id ?? holding.account?.id;
+        if (!id || !Number.isFinite(holding.value)) continue;
+        positionsByAccount.set(id, (positionsByAccount.get(id) ?? 0) + holding.value);
+      }
+
       mount(accountsHost, accounts.length
         ? h('div.rows', accounts.map((account) => h('button.row', {
             type: 'button', 'data-sound': 'sheetOpen',
@@ -59,12 +74,20 @@ export async function accountsScreen() {
               h('div.row__title', account.label),
               h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : account.provider),
             ),
-            h('div.row__end',
-              account.balance === null || account.balance === undefined
-                ? h('div.row__value.unknown', '—')
-                : h('div.row__value.sensitive', money(Number(account.balance), { currency: account.currency })),
-              h('div.row__sub.muted-2', account.kind === 'exchange' ? 'via positions' : ''),
-            ),
+            (() => {
+              const positions = positionsByAccount.get(account.id) ?? 0;
+              const cash = Number(account.balance);
+              const hasCash = Number.isFinite(cash);
+              const known = hasCash || positions > 0;
+              return h('div.row__end',
+                known
+                  ? h('div.row__value.sensitive', money((hasCash ? cash : 0) + positions))
+                  : h('div.row__value.unknown', '—'),
+                positions > 0
+                  ? h('div.row__sub.muted-2', `dont ${money(positions)} en positions`)
+                  : h('div.row__sub.muted-2', ''),
+              );
+            })(),
           )))
         : emptyState({ emoji: '🏦', title: 'Aucun compte',
             body: 'Ajoutez un compte bancaire, un exchange, ou une simple ligne de liquidités.' }));
