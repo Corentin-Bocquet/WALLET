@@ -107,9 +107,6 @@ async function buildContext(service: ReturnType<typeof serviceClient>, userId: s
   }
 
   /* Couverture des données bancaires */
-  const { data: span } = await service.rpc('monthly_summary').maybeSingle().catch(() => ({ data: null }));
-  if (span) lines.push(`Mois en cours : ${JSON.stringify(span)}`);
-
   const { data: bounds } = await service.from('bank_transactions')
     .select('booked_at').eq('user_id', userId)
     .order('booked_at', { ascending: false }).limit(1).maybeSingle();
