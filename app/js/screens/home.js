@@ -10,13 +10,13 @@ import { h, mount } from '../lib/dom.js';
 import { navigate } from '../lib/router.js';
 import { openSheet } from '../lib/sheet.js';
 import {
-  screenHead, section, bigAmount, freshness, partialNotice, loadingBlock,
+  screenHead, section, bigAmount, freshness, partialNotice, loadingBlock, currencyToggle,
   loadingRows, emptyState, asyncBlock, seeAll, demoBanner, badge,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo } from '../components/explain.js';
 import { areaChart, barList } from '../components/chart.js';
 import { money, pct, day as fmtDay, trendClass } from '../lib/fmt.js';
-import { SUPPORTED, displayCurrency, setDisplayCurrency, cycleCurrency, canDisplay, symbolOf } from '../lib/currency.js';
+import { cycleCurrency } from '../lib/currency.js';
 import * as repo from '../data/repo.js';
 import { openAssistant } from './assistant.js';
 
@@ -31,10 +31,12 @@ export async function homeScreen() {
 
   screen.append(
     screenHead('Accueil', {
-      right: h('button.icon-btn', {
+      right: h('div.head__tools',
+        currencyToggle(),
+        h('button.icon-btn', {
         type: 'button', 'aria-label': 'Demander à mon patrimoine',
         'data-sound': 'sheetOpen', onclick: () => openAssistant(),
-      }, '💬'),
+      }, '💬')),
     }),
   );
 
@@ -126,7 +128,6 @@ async function renderHero(host) {
           changePct,
           changeLabel: RANGES.find((r) => r.key === days)?.label,
         }),
-        currencySwitch(),
       ),
 
       h('div', { style: { marginTop: '10px' } },
@@ -180,23 +181,6 @@ async function renderHero(host) {
  */
 let swipeFrom = null;
 
-function currencySwitch() {
-  const active = displayCurrency();
-  return h('div.segmented', {
-    role: 'group',
-    'aria-label': 'Devise d’affichage',
-    style: { marginTop: '12px', maxWidth: '180px' },
-  },
-    SUPPORTED.map((code) => h('button', {
-      type: 'button',
-      'aria-selected': String(code === active),
-      disabled: !canDisplay(code),
-      title: canDisplay(code) ? `Afficher en ${code}` : `Taux ${code} indisponible`,
-      'data-sound': 'toggle',
-      onclick: () => setDisplayCurrency(code),
-    }, `${symbolOf(code)} ${code}`)),
-  );
-}
 
 function splitTile(label, value, emoji, onClick) {
   return h('button.tile.card--tap', {
