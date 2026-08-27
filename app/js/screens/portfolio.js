@@ -23,9 +23,10 @@ export async function portfolioScreen() {
     right: h('div.head__tools',
       currencyToggle({ compact: true }),
       h('button.icon-btn', {
-      type: 'button', 'aria-label': 'Synchroniser', 'data-sound': 'select',
-      onclick: (event) => sync(event.currentTarget),
-    }, '⟳'),
+        type: 'button', 'aria-label': 'Synchroniser', 'data-sound': 'select',
+        onclick: (event) => sync(event.currentTarget),
+      }, '⟳'),
+    ),
   }));
 
   const hero = h('div');
