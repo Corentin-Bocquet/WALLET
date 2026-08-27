@@ -108,7 +108,7 @@ Deno.serve(async (request) => {
           is_active: true,
           hit_count: stats.count,
           last_hit_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,match_type,pattern' });
+        }, { onConflict: 'user_id,match_type,pattern', ignoreDuplicates: false });
         if (!ruleError) rules += 1;
 
         // 2. La mémoire : elle sert aussi aux libellés approchants.
@@ -120,7 +120,7 @@ Deno.serve(async (request) => {
           category_id: categoryId,
           hits: stats.count,
           last_seen_at: new Date().toISOString(),
-        }, { onConflict: 'user_id,key_type,key_value,amount_bucket' });
+        }, { onConflict: 'user_id,key_type,key_value,amount_bucket,category_id' });
 
         // 3. Les opérations déjà en base.
         const { data: updated } = await service.from('bank_transactions')
