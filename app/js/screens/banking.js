@@ -9,6 +9,7 @@
  */
 
 import { h, mount, icon } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { navigate, parseHash } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
@@ -40,7 +41,7 @@ export async function bankingScreen() {
     right: h('button.icon-btn', {
       type: 'button', 'aria-label': 'Règles et mémoire', 'data-sound': 'select',
       onclick: () => navigate('/banque/regles'),
-    }, '⚙'),
+    }, glyph('settings')),
   }));
 
   /* Sélecteur de mois, comme sur l'écran de référence */
@@ -127,7 +128,7 @@ export async function bankingScreen() {
                     onSelect: (item) => { categoryFilter = item.category_id; paint(); },
                   })),
               )
-            : emptyState({ emoji: '🧾', title: 'Aucune dépense ce mois-ci' }),
+            : emptyState({ emoji: glyph('receipt'), title: 'Aucune dépense ce mois-ci' }),
         ),
 
         section(categoryFilter
@@ -188,7 +189,7 @@ function toClassifyBanner(transactions) {
     onclick: () => navigate('/banque/a-classer'),
   },
     h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
-      h('span', { style: { fontSize: '22px' } }, '❓'),
+      h('span', { style: { fontSize: '22px' } }, glyph('question')),
       h('div',
         h('div', { style: { fontWeight: '600' } }, `${pending.length} transactions à classer`),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
@@ -207,7 +208,7 @@ export function transactionList(transactions, categories, onChange) {
   const visible = transactions.filter((t) => t.status !== 'hidden');
 
   if (!visible.length) {
-    return emptyState({ emoji: '🧾', title: 'Aucune transaction', body: 'Rien sur cette période.' });
+    return emptyState({ emoji: glyph('receipt'), title: 'Aucune transaction', body: 'Rien sur cette période.' });
   }
 
   const byDay = new Map();
@@ -235,7 +236,7 @@ export function transactionRow(tx, categories, onChange) {
   },
     h('div.avatar', {
       style: { background: 'var(--surface-2)', fontSize: '18px' },
-    }, tx.emoji || '❓'),
+    }, tx.emoji || glyph('question')),
 
     h('div.row__main',
       h('div.row__title', titleCase(tx.merchant || tx.clean_label) || tx.raw_label),
@@ -289,7 +290,7 @@ export function openTransaction(tx, categories, onChange) {
         /* Catégorie actuelle + raison (§47) */
         h('div.card', { style: { marginTop: '24px' } },
           h('div', { style: { display: 'flex', alignItems: 'center', gap: '12px' } },
-            h('span', { style: { fontSize: '24px' } }, tx.emoji || '❓'),
+            h('span', { style: { fontSize: '24px' } }, tx.emoji || glyph('question')),
             h('div', { style: { flex: '1' } },
               h('div', { style: { fontWeight: '700' } }, tx.category_label || 'Non classé'),
               h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
@@ -315,7 +316,7 @@ export function openTransaction(tx, categories, onChange) {
         /* Anomalie */
         tx.anomaly
           ? h('div.notice.notice--warn', { style: { marginTop: '14px' } },
-              h('span', '⚠️'),
+              h('span', glyph('alert')),
               h('div', h('strong', 'Dépense inhabituelle', explainChip('anomaly', { label: 'anomalie' })),
                 tx.anomaly.explanation))
           : null,
@@ -323,7 +324,7 @@ export function openTransaction(tx, categories, onChange) {
         /* Suggestion d'exclusion apprise (§13) */
         tx.suggestIgnore
           ? h('div.notice', { style: { marginTop: '14px' } },
-              h('span', '💡'),
+              h('span', glyph('bulb')),
               h('div',
                 h('strong', tx.suggestIgnore.label),
                 tx.suggestIgnore.detail,
@@ -408,7 +409,7 @@ function pickCategory(tx, categories, closeParent, onChange) {
             h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } }, category.emoji),
             h('div.row__main', h('div.row__title', category.label)),
             h('div.row__end',
-              category.id === tx.category_id ? h('span', { style: { color: 'var(--accent)' } }, '✓') : null),
+              category.id === tx.category_id ? h('span', { style: { color: 'var(--accent)' } }, glyph('check')) : null),
           ))),
         )),
       );
@@ -459,7 +460,7 @@ async function proposeSimilar(tx, category, result, onChange) {
 
       h('div.rows', { style: { marginTop: '16px', maxHeight: '30vh', overflowY: 'auto' } },
         similar.slice(0, 8).map((t) => h('div.row',
-          h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '16px' } }, t.emoji || '❓'),
+          h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '16px' } }, t.emoji || glyph('question')),
           h('div.row__main',
             h('div.row__title', fmtDay(t.booked_at)),
             h('div.row__sub', t.category_label || 'Non classé'),
@@ -569,7 +570,7 @@ export async function toClassifyScreen() {
 
       if (!pending.length) {
         mount(body, emptyState({
-          emoji: '🎉',
+          emoji: glyph('confetti'),
           title: 'Tout est classé',
           body: 'WALLET sait quoi faire de chacune de vos transactions.',
           action: h('button.btn.btn--secondary', { type: 'button', onclick: () => navigate('/banque') },
@@ -630,7 +631,7 @@ export async function recurringScreen() {
 
     if (!recurring.length) {
       mount(body, emptyState({
-        emoji: '🔄',
+        emoji: glyph('refresh'),
         title: 'Aucun paiement récurrent détecté',
         body: 'Il faut au moins trois passages réguliers pour qu’un prélèvement soit reconnu.',
       }));
@@ -688,7 +689,7 @@ function recurringList(items) {
     }),
   },
     h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-      ({ subscription: '🔄', rent: '🏠', salary: '💼', loan: '🏦', insurance: '🛡️', transfer: '🔁' })[r.kind] ?? '🔄'),
+      ({ subscription: glyph('refresh'), rent: glyph('home'), salary: glyph('briefcase'), loan: glyph('bank'), insurance: glyph('shield'), transfer: glyph('refresh') })[r.kind] ?? glyph('refresh')),
     h('div.row__main',
       h('div.row__title', r.label),
       h('div.row__sub', `${CADENCE_LABEL[r.cadence] ?? r.cadence}${r.is_active ? '' : ' · arrêté ?'}`),
@@ -735,7 +736,7 @@ export async function rulesScreen() {
 
       if (!rules.length) {
         mount(rulesHost, emptyState({
-          emoji: '📏',
+          emoji: glyph('ruler'),
           title: 'Aucune règle',
           body: 'Créez-en une depuis n’importe quelle transaction : « Créer une règle pour ce marchand ».',
         }));
@@ -746,7 +747,7 @@ export async function rulesScreen() {
         const category = rule.category || byId.get(rule.category_id);
         return h('div.row',
           h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-            category?.emoji ?? '❓'),
+            category?.emoji ?? glyph('question')),
           h('div.row__main',
             h('div.row__title', `« ${rule.pattern} »`),
             h('div.row__sub', `→ ${category?.label ?? '—'}${rule.sign === 'debit' ? ' · dépenses' : rule.sign === 'credit' ? ' · revenus' : ''}`),
@@ -781,7 +782,7 @@ export async function rulesScreen() {
 
       if (!memory.length) {
         mount(memoryHost, emptyState({
-          emoji: '🧠',
+          emoji: glyph('brain'),
           title: 'WALLET n’a encore rien appris',
           body: 'Corrigez la catégorie d’une transaction : il retiendra votre choix et l’appliquera aux suivantes.',
         }));
@@ -792,7 +793,7 @@ export async function rulesScreen() {
         const category = entry.category || byId.get(entry.category_id);
         return h('div.row',
           h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-            category?.emoji ?? '❓'),
+            category?.emoji ?? glyph('question')),
           h('div.row__main',
             h('div.row__title', titleCase(entry.key_value)),
             h('div.row__sub',
