@@ -169,6 +169,20 @@ export const supabaseBackend = {
   },
 
   /** Taux de change du jour, base euro : { USD: 1.1669 }. */
+  async askAssistant(question) {
+    const sb = await getClient();
+    const { data, error } = await sb.functions.invoke('ai-assistant', { body: { question } });
+    if (error) throw new Error(data?.message || error.message || 'Assistant indisponible.');
+    return data;
+  },
+
+  async categorizeWithAI() {
+    const sb = await getClient();
+    const { data, error } = await sb.functions.invoke('ai-categorize', { body: {} });
+    if (error) throw new Error(data?.message || error.message || 'Classement indisponible.');
+    return data;
+  },
+
   async getFxRates() {
     const sb = await getClient();
     const rows = unwrap(await sb.from('fx_rates')
