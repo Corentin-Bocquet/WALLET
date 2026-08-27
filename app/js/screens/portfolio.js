@@ -52,9 +52,11 @@ export async function portfolioScreen() {
   /* Comptes */
   screen.append(section('Mes comptes', {
     action: seeAll('Gérer', () => navigate('/profil/comptes')),
-  }, asyncBlock(repo.getAccounts(), {
+  }, asyncBlock(
+    Promise.all([repo.getAccounts(), repo.getHoldings().catch(() => [])]),
+    {
     loading: () => loadingRows(3),
-    render: renderAccounts,
+    render: ([accounts, holdings]) => renderAccounts(accounts, holdings),
     empty: () => emptyState({
       emoji: '🏦',
       title: 'Aucun compte',
