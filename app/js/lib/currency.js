@@ -10,12 +10,19 @@
  */
 
 export const BASE = 'EUR';
-export const SUPPORTED = ['EUR', 'USD'];
+export const SUPPORTED = ['EUR', 'USD', 'GBP', 'CHF', 'JPY'];
+
+/**
+ * L'interrupteur ne bascule QU'ENTRE l'euro et le dollar : c'est un
+ * aller-retour d'un geste, pas un sélecteur. Les autres devises se
+ * choisissent dans les préférences, où l'on prend le temps de lire.
+ */
+export const TOGGLE_PAIR = ['EUR', 'USD'];
 
 const KEY = 'wallet.displayCurrency';
 const RATES_KEY = 'wallet.fxRates';
 
-const SYMBOLS = { EUR: '€', USD: '$' };
+const SYMBOLS = { EUR: '€', USD: '$', GBP: '£', CHF: 'CHF', JPY: '¥' };
 
 function readStored(key, fallback) {
   try {
@@ -55,7 +62,7 @@ export function setDisplayCurrency(code) {
 
 /** Passe à la devise suivante. Utilisé par le bouton et par le balayage. */
 export function cycleCurrency(direction = 1) {
-  const usable = SUPPORTED.filter(canDisplay);
+  const usable = TOGGLE_PAIR.filter(canDisplay);
   if (usable.length < 2) return false;
   const index = usable.indexOf(current);
   const next = usable[(index + direction + usable.length) % usable.length];
