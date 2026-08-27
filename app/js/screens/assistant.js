@@ -85,7 +85,7 @@ function buildPanel(close, initialQuestion) {
 
     // Le moteur local couvre les questions cadrées. Pour tout le reste, on
     // passe la main à l'IA plutôt que de répondre « je ne sais pas ».
-    if (result?.intent === 'unknown' && !repo.isDemoMode()) {
+    if (!result?.intent && !repo.isDemoMode()) {
       pending.replaceWith(h('div.card', h('span.muted', 'Je réfléchis…')));
       const thinking = thread.lastElementChild;
       try {
@@ -94,7 +94,8 @@ function buildPanel(close, initialQuestion) {
           intent: 'llm',
           text: remote?.answer || result.text,
           evidence: remote?.evidence ?? [],
-          caveat: 'Réponse rédigée par une IA à partir de vos chiffres. Vérifiez ce qui compte.',
+          caveat: 'Réponse rédigée par une IA à partir de vos totaux. Vérifiez ce qui compte.',
+          action: null,
         };
       } catch (error) {
         result = { ...result, caveat: error.message };
