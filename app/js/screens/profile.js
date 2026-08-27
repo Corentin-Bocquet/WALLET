@@ -18,6 +18,7 @@ import {
 import { explainChip } from '../components/explain.js';
 import { money, initials, day as fmtDay, ago } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
+import { SUPPORTED, displayCurrency, setDisplayCurrency } from '../lib/currency.js';
 import { config, saveConfig } from '../config.js';
 import { openServerSheet } from './auth.js';
 import { DEFAULT_WEIGHTS, DEFAULT_ZONES, FACTOR_LABELS, FACTOR_HELP, ZONE_META } from '../engine/score.js';
@@ -132,17 +133,23 @@ function simpleSettings(settings) {
     h('div.switch-row',
       h('div',
         h('div.switch-row__label', 'Devise'),
-        h('div.switch-row__hint', 'Utilisée partout dans l’application'),
+        h('div.switch-row__hint', 'Euro et dollar sont aussi accessibles d’un geste depuis l’accueil'),
       ),
       h('select', {
         style: { background: 'var(--surface-2)', borderRadius: 'var(--r-md)', padding: '10px 14px' },
         onchange: (event) => {
-          update({ base_currency: event.target.value });
-          toast('Devise modifiée. Rechargez pour tout mettre à jour.');
+          const code = event.target.value;
+          // Le changement s'applique tout de suite : demander de recharger
+          // pour voir l'effet d'un réglage, c'est avouer qu'il ne marche pas.
+          const applied = setDisplayCurrency(code);
+          update({ base_currency: code });
+          toast(applied
+            ? `Montants affichés en ${code}`
+            : `Taux ${code} indisponible pour l’instant`);
         },
       },
-        ['EUR', 'USD', 'GBP', 'CHF'].map((code) =>
-          h('option', { value: code, selected: (settings.base_currency ?? 'EUR') === code }, code)),
+        SUPPORTED.map((code) =>
+          h('option', { value: code, selected: displayCurrency() === code }, code)),
       ),
     ),
 
