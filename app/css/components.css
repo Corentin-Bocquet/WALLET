@@ -536,3 +536,34 @@
 }
 
 .head__tools { display: flex; align-items: center; gap: 10px; }
+
+
+/* — Icônes au trait ————————————————————————————————————— */
+.avatar svg { width: 20px; height: 20px; color: var(--text-2); }
+.empty__emoji svg { width: 34px; height: 34px; margin-inline: auto; color: var(--text-3); }
+.notice svg, .row__sub svg { flex: 0 0 auto; }
+.notice > span:first-child svg { width: 20px; height: 20px; }
+.avatar img { display: block; }
+
+/* — Badges de compte sur une position —————————————————————
+   La couleur de la marque suffit à distinguer d'où vient la ligne, sans
+   ajouter une colonne ni un second niveau de lecture. */
+.acct-badges { display: inline-flex; gap: 4px; flex-wrap: wrap; }
+.acct-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  letter-spacing: .01em;
+  color: #fff;
+  background: var(--badge, var(--surface-2));
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12);
+}
+
+/* — Jauge d'humeur du marché ————————————————————————————— */
+.gauge { display: grid; place-items: center; gap: 2px; }
+.gauge__value { font-size: 34px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
+.gauge__label { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
