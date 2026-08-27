@@ -16,7 +16,7 @@ import {
   emptyState, asyncBlock, badge, changeBadge, estimateBadge, accordion, errorState,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo, showReasoning } from '../components/explain.js';
-import { areaChart, sparkline, zoneBar } from '../components/chart.js';
+import { arcGauge, areaChart, sparkline, zoneBar } from '../components/chart.js';
 import { money, pct, num, compact, day as fmtDay, trendClass } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import { computeIndicators, fearGreedLabel } from '../engine/indicators.js';
@@ -152,22 +152,15 @@ async function renderBarometer(host) {
     const mood = fearGreedLabel(value);
 
     mount(host, h('div.card', { style: { marginTop: '4px' } },
-      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '16px' } },
-        h('div',
-          h('div.eyebrow', labelWithInfo('Humeur du marché', 'fear_greed')),
-          h('div', { style: { marginTop: '6px', display: 'flex', alignItems: 'baseline', gap: '10px' } },
-            h('span.num', { style: { fontSize: '30px', fontWeight: '700', color: mood.color } },
-              value === null ? '—' : value),
-            h('span', { style: { color: mood.color, fontWeight: '600' } }, mood.label),
-          ),
-        ),
+      h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' } },
+        h('div.eyebrow', labelWithInfo('Humeur du marché', 'fear_greed')),
         fg?.is_derived ? estimateBadge(repo.isDemoMode() ? 'simulé' : 'estimé') : null,
       ),
-      h('div.meter', { style: { marginTop: '14px' } },
-        h('div.meter__fill', {
-          style: { width: `${value ?? 0}%`, background: mood.color },
-        })),
-      h('div', { style: { marginTop: '10px' } },
+
+      h('div', { style: { marginTop: '10px', display: 'grid', justifyItems: 'center' } },
+        arcGauge(value, { label: mood.label })),
+
+      h('div', { style: { marginTop: '8px' } },
         freshness(fg?.fetched_at, { thresholdSeconds: 6 * 3600, message: fg?.source })),
     ));
   } catch {
