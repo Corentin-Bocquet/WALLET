@@ -3,6 +3,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
@@ -59,7 +60,7 @@ export async function portfolioScreen() {
     loading: () => loadingRows(3),
     render: ([accounts, holdings]) => renderAccounts(accounts, holdings),
     empty: () => emptyState({
-      emoji: '🏦',
+      emoji: glyph('bank'),
       title: 'Aucun compte',
       body: 'Ajoutez un compte pour commencer à suivre votre patrimoine.',
       action: h('button.btn.btn--primary', { type: 'button', onclick: () => navigate('/profil/comptes') },
@@ -118,7 +119,7 @@ async function renderHero(host) {
         : null,
       netWorth.stale_prices?.length
         ? h('div.notice.notice--warn', { style: { marginTop: '12px' } },
-            h('span', '🕒'),
+            h('span', glyph('clock')),
             h('div', h('strong', 'Prix anciens'),
               `${netWorth.stale_prices.join(', ')} : le dernier prix connu date d'un moment. La valeur affichée peut avoir bougé.`))
         : null,
@@ -137,13 +138,13 @@ async function renderSplit(host) {
     const netWorth = await repo.getNetWorth();
     const buckets = [
       { label: 'Crypto', value: netWorth.crypto, color: 'var(--accent)', emoji: '₿' },
-      { label: 'Liquidités', value: netWorth.cash, color: 'var(--accent-2)', emoji: '💶' },
-      { label: 'Actions', value: netWorth.equity, color: 'var(--info)', emoji: '📈' },
-      { label: 'Autres', value: netWorth.other, color: 'var(--neutral)', emoji: '📦' },
+      { label: 'Liquidités', value: netWorth.cash, color: 'var(--accent-2)', emoji: glyph('cash') },
+      { label: 'Actions', value: netWorth.equity, color: 'var(--info)', emoji: glyph('trendUp') },
+      { label: 'Autres', value: netWorth.other, color: 'var(--neutral)', emoji: glyph('box') },
     ].filter((b) => b.value > 0);
 
     if (!buckets.length) {
-      mount(host, emptyState({ emoji: '🥧', title: 'Rien à répartir pour l’instant' }));
+      mount(host, emptyState({ emoji: glyph('pie'), title: 'Rien à répartir pour l’instant' }));
       return;
     }
 
@@ -170,7 +171,7 @@ async function renderPositions(host) {
     const holdings = await repo.getHoldings();
     if (!holdings.length) {
       mount(host, emptyState({
-        emoji: '📭',
+        emoji: glyph('inbox'),
         title: 'Aucune position',
         body: 'Connectez Kraken ou OKX depuis Profil, ou saisissez une position à la main.',
         action: h('button.btn.btn--primary', { type: 'button', onclick: () => openAddHolding() }, 'Ajouter une position'),
@@ -266,7 +267,7 @@ function renderAccounts(accounts, holdings = []) {
 
   return h('div.rows', accounts.map((account) => h('div.row',
     h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-      ({ bank: '🏦', exchange: '🪙', broker: '📈', cash: '💶', manual: '✍️' })[account.kind] ?? '📦'),
+      ({ bank: glyph('bank'), exchange: glyph('coin'), broker: glyph('trendUp'), cash: glyph('cash'), manual: glyph('pen') })[account.kind] ?? glyph('box')),
     h('div.row__main',
       h('div.row__title', account.label),
       h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : account.provider),
@@ -305,14 +306,14 @@ async function renderBehaviour(host) {
 
     if (!analysis.available) {
       mount(host, h('div.notice',
-        h('span', 'ℹ️'),
+        h('span', 'ℹ'),
         h('div', h('strong', 'Pas encore assez d’achats'), analysis.reason)));
       return;
     }
 
     if (!analysis.observations.length) {
       mount(host, emptyState({
-        emoji: '🔍', title: 'Rien de marquant',
+        emoji: glyph('search'), title: 'Rien de marquant',
         body: 'Vos achats ne montrent pas de motif particulier sur la période analysée.',
       }));
       return;
@@ -335,7 +336,7 @@ async function renderBehaviour(host) {
       },
         h('div', { style: { display: 'flex', gap: '12px', alignItems: 'flex-start' } },
           h('span', { style: { fontSize: '20px' } },
-            ({ success: '✅', warning: '⚠️', danger: '🔴' })[observation.severity] ?? '💡'),
+            ({ success: glyph('checkCircle'), warning: glyph('alert'), danger: glyph('dot') })[observation.severity] ?? glyph('bulb')),
           h('div',
             h('div', { style: { fontWeight: '600' } }, observation.title),
             h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '2px' } }, observation.body),
