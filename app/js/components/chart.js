@@ -403,3 +403,89 @@ export function barList(items, { currency = 'EUR', onSelect } = {}) {
     }),
   );
 }
+
+
+/**
+ * Jauge en arc, pour une valeur bornée de 0 à 100.
+ *
+ * Cinq segments plutôt qu'un dégradé : une humeur de marché se lit par
+ * paliers (« peur extrême », « cupidité »), pas au point de pourcentage
+ * près. Le curseur dit où l'on est, les couleurs disent ce que ça vaut.
+ */
+export function arcGauge(value, { label = null, size = 240, thickness = 18 } = {}) {
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const known = Number.isFinite(value);
+  const clamped = known ? Math.min(100, Math.max(0, value)) : 0;
+
+  const w = size;
+  const h = size * 0.60;
+  const cx = w / 2;
+  const cy = h - thickness * 0.4;
+  const r = (w - thickness) / 2;
+
+  // Cinq paliers, du plus craintif au plus cupide.
+  const BANDS = [
+    { to: 20,  color: '#8E2230' },
+    { to: 40,  color: '#E0525F' },
+    { to: 60,  color: '#F2CE4B' },
+    { to: 80,  color: '#5FD79B' },
+    { to: 100, color: '#2F9E63' },
+  ];
+
+  const pointAt = (pct) => {
+    const angle = Math.PI * (1 - pct / 100);
+    return [cx + r * Math.cos(angle), cy - r * Math.sin(angle)];
+  };
+
+  const svg = document.createElementNS(SVGNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('width', '100%');
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', known ? `${Math.round(clamped)} sur 100` : 'Valeur inconnue');
+  svg.style.maxWidth = `${w}px`;
+
+  let from = 0;
+  for (const band of BANDS) {
+    // Un cheveu d'écart entre les segments : ils restent lisibles sans
+    // trait de séparation, qui alourdirait la figure.
+    const [x1, y1] = pointAt(from + 1.2);
+    const [x2, y2] = pointAt(band.to - 1.2);
+    const arc = document.createElementNS(SVGNS, 'path');
+    arc.setAttribute('d', `M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`);
+    arc.setAttribute('stroke', known ? band.color : 'var(--surface-2)');
+    arc.setAttribute('stroke-width', thickness);
+    arc.setAttribute('stroke-linecap', 'round');
+    arc.setAttribute('fill', 'none');
+    svg.append(arc);
+    from = band.to;
+  }
+
+  if (known) {
+    const [px, py] = pointAt(clamped);
+    const halo = document.createElementNS(SVGNS, 'circle');
+    halo.setAttribute('cx', px); halo.setAttribute('cy', py);
+    halo.setAttribute('r', thickness * 0.62);
+    halo.setAttribute('fill', 'var(--bg-elevated, #16181d)');
+    const dot = document.createElementNS(SVGNS, 'circle');
+    dot.setAttribute('cx', px); dot.setAttribute('cy', py);
+    dot.setAttribute('r', thickness * 0.44);
+    dot.setAttribute('fill', '#fff');
+    svg.append(halo, dot);
+  }
+
+  const band = BANDS.find((b) => clamped <= b.to) ?? BANDS[BANDS.length - 1];
+
+  return h('div.gauge', { style: { position: 'relative' } },
+    svg,
+    h('div', {
+      style: {
+        position: 'absolute', left: '0', right: '0', bottom: `${thickness * 0.2}px`,
+        display: 'grid', justifyItems: 'center', gap: '2px', pointerEvents: 'none',
+      },
+    },
+      h('div.gauge__value', { style: { color: known ? '#fff' : 'var(--text-3)' } },
+        known ? String(Math.round(clamped)) : '—'),
+      label ? h('div.gauge__label', { style: { color: known ? band.color : 'var(--text-3)' } }, label) : null,
+    ),
+  );
+}
