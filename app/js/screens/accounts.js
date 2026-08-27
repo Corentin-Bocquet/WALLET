@@ -13,6 +13,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
@@ -69,7 +70,7 @@ export async function accountsScreen() {
             onclick: () => editAccount(account, paint),
           },
             h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-              ({ bank: '🏦', exchange: '🪙', broker: '📈', cash: '💶', manual: '✍️' })[account.kind] ?? '📦'),
+              ({ bank: glyph('bank'), exchange: glyph('coin'), broker: glyph('trendUp'), cash: glyph('cash'), manual: glyph('pen') })[account.kind] ?? glyph('box')),
             h('div.row__main',
               h('div.row__title', account.label),
               h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : account.provider),
@@ -89,7 +90,7 @@ export async function accountsScreen() {
               );
             })(),
           )))
-        : emptyState({ emoji: '🏦', title: 'Aucun compte',
+        : emptyState({ emoji: glyph('bank'), title: 'Aucun compte',
             body: 'Ajoutez un compte bancaire, un exchange, ou une simple ligne de liquidités.' }));
     } catch (error) {
       mount(accountsHost, errorState(error, { what: 'vos comptes', onRetry: paint }));
@@ -99,7 +100,7 @@ export async function accountsScreen() {
   async function paintExchanges() {
     if (repo.isDemoMode()) {
       mount(exchangeHost, h('div.notice',
-        h('span', '🧪'),
+        h('span', glyph('flask')),
         h('div', h('strong', 'Mode démonstration'),
           'Connectez d’abord votre serveur Supabase : les clés d’exchange ne peuvent être chiffrées que côté serveur, jamais dans le navigateur.')));
       return;
@@ -116,7 +117,7 @@ export async function accountsScreen() {
               onclick: () => existing ? manageCredential(existing, paintExchanges)
                                       : connectExchange(provider, paintExchanges),
             },
-              h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } }, '🪙'),
+              h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } }, glyph('coin')),
               h('div.row__main',
                 h('div.row__title', provider === 'kraken' ? 'Kraken' : 'OKX'),
                 h('div.row__sub', existing
@@ -135,7 +136,7 @@ export async function accountsScreen() {
         ),
 
         h('div.notice', { style: { marginTop: '14px' } },
-          h('span', '🔒'),
+          h('span', glyph('lock')),
           h('div',
             h('strong', 'Lecture seule, sans exception'),
             'WALLET refuse toute clé disposant de droits de trading ou de retrait, et n’appelle jamais d’endpoint d’ordre. Vos clés sont chiffrées côté serveur et ne redescendent jamais dans le navigateur.')),
@@ -158,7 +159,7 @@ function editAccount(account, onChange) {
       const label = h('input', { type: 'text', value: account?.label ?? '', required: true });
       const kind = h('select',
         [['bank', '🏦 Compte bancaire'], ['cash', '💶 Liquidités'], ['broker', '📈 Courtier'],
-         ['manual', '✍️ Autre actif']].map(([value, text]) =>
+         ['manual', '✍ Autre actif']].map(([value, text]) =>
           h('option', { value, selected: account?.kind === value }, text)));
       const balance = h('input', {
         type: 'number', step: '0.01', inputmode: 'decimal',
@@ -268,7 +269,7 @@ function connectExchange(provider, onChange) {
         },
       },
         h('div.notice.notice--warn',
-          h('span', '⚠️'),
+          h('span', glyph('alert')),
           h('div',
             h('strong', 'Créez une clé en LECTURE SEULE'),
             isOkx
@@ -308,7 +309,7 @@ function manageCredential(credential, onChange) {
 
       credential.last_error
         ? h('div.notice.notice--danger', { style: { marginTop: '16px' } },
-            h('span', '⚠️'), h('div', h('strong', 'Dernière erreur'), credential.last_error))
+            h('span', glyph('alert')), h('div', h('strong', 'Dernière erreur'), credential.last_error))
         : null,
 
       h('div', { style: { display: 'grid', gap: '10px', marginTop: '24px' } },
@@ -442,7 +443,7 @@ async function handleImport(file) {
               : null,
             parsed.warnings.length
               ? h('div.notice.notice--warn', { style: { marginTop: '12px' } },
-                  h('span', '⚠️'),
+                  h('span', glyph('alert')),
                   h('div', h('strong', `${parsed.warnings.length} lignes ignorées`),
                     parsed.warnings.slice(0, 3).join(' · ')))
               : null,
