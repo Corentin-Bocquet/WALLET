@@ -7,6 +7,7 @@
  */
 
 import { h, mount } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import {
@@ -17,13 +18,13 @@ import * as repo from '../data/repo.js';
 import { ZONE_META } from '../engine/score.js';
 
 const SUBJECTS = [
-  { key: 'price', label: 'Prix d’un actif', emoji: '💰', needs: 'asset', unit: '€' },
-  { key: 'score', label: 'Investment Score', emoji: '🎯', needs: 'asset', unit: '/100' },
-  { key: 'zone', label: 'Changement de zone', emoji: '🚦', needs: 'asset', unit: '' },
-  { key: 'net_worth', label: 'Patrimoine total', emoji: '📊', needs: null, unit: '€' },
-  { key: 'category_spend', label: 'Dépense sur une catégorie', emoji: '🧾', needs: 'category', unit: '€' },
-  { key: 'savings_rate', label: 'Taux d’épargne', emoji: '🏦', needs: null, unit: '%' },
-  { key: 'anomaly', label: 'Dépense inhabituelle', emoji: '⚠️', needs: null, unit: '' },
+  { key: 'price', label: 'Prix d’un actif', emoji: glyph('coin'), needs: 'asset', unit: '€' },
+  { key: 'score', label: 'Investment Score', emoji: glyph('target'), needs: 'asset', unit: '/100' },
+  { key: 'zone', label: 'Changement de zone', emoji: glyph('traffic'), needs: 'asset', unit: '' },
+  { key: 'net_worth', label: 'Patrimoine total', emoji: glyph('chart'), needs: null, unit: '€' },
+  { key: 'category_spend', label: 'Dépense sur une catégorie', emoji: glyph('receipt'), needs: 'category', unit: '€' },
+  { key: 'savings_rate', label: 'Taux d’épargne', emoji: glyph('bank'), needs: null, unit: '%' },
+  { key: 'anomaly', label: 'Dépense inhabituelle', emoji: glyph('alert'), needs: null, unit: '' },
 ];
 
 const OPERATORS = [
@@ -61,7 +62,7 @@ export async function alertsScreen() {
             onclick: () => editAlert(alert, paint),
           },
             h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-              SUBJECTS.find((s) => s.key === alert.subject)?.emoji ?? '🔔'),
+              SUBJECTS.find((s) => s.key === alert.subject)?.emoji ?? glyph('bell')),
             h('div.row__main',
               h('div.row__title', alert.label),
               h('div.row__sub', describeAlert(alert)),
@@ -74,7 +75,7 @@ export async function alertsScreen() {
             ),
           )))
         : emptyState({
-            emoji: '🔔',
+            emoji: glyph('bell'),
             title: 'Aucune alerte',
             body: 'Créez une alerte pour être prévenu quand un prix, un score ou une dépense franchit un seuil.',
             action: h('button.btn.btn--primary', {
@@ -84,7 +85,7 @@ export async function alertsScreen() {
 
       if (repo.isDemoMode()) {
         mount(events, h('div.notice',
-          h('span', '🧪'),
+          h('span', glyph('flask')),
           h('div', h('strong', 'Historique indisponible en démonstration'),
             'Les alertes sont évaluées par une fonction serveur : connectez votre serveur Supabase pour les activer réellement.')));
         return;
@@ -94,14 +95,14 @@ export async function alertsScreen() {
       mount(events, history.length
         ? h('div.rows', history.map((event) => h('div.row',
             h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-              ({ warning: '⚠️', danger: '🔴', success: '✅' })[event.severity] ?? '🔔'),
+              ({ warning: glyph('alert'), danger: glyph('dot'), success: glyph('checkCircle') })[event.severity] ?? glyph('bell')),
             h('div.row__main',
               h('div.row__title', event.title),
               h('div.row__sub', { style: { whiteSpace: 'normal' } }, event.body),
             ),
             h('div.row__end', h('div.row__sub', ago(event.created_at))),
           )))
-        : emptyState({ emoji: '🤫', title: 'Rien ne s’est encore déclenché' }));
+        : emptyState({ emoji: glyph('eyeOff'), title: 'Rien ne s’est encore déclenché' }));
 
       repo.markAlertsRead().catch(() => {});
     } catch (error) {
@@ -235,7 +236,7 @@ function editAlert(alert, onChange) {
 
         repo.isDemoMode()
           ? h('div.notice.notice--warn', { style: { marginTop: '16px' } },
-              h('span', '⚠️'),
+              h('span', glyph('alert')),
               h('div', h('strong', 'Aucune notification en démonstration'),
                 'Vos alertes sont enregistrées sur cet appareil, mais rien ne les évaluera tant que votre serveur Supabase n’est pas connecté.'))
           : null,
@@ -251,9 +252,9 @@ function editAlert(alert, onChange) {
 /* ================================================================== */
 
 const GOAL_KINDS = [
-  { key: 'net_worth', label: 'Patrimoine total', emoji: '📊', unit: '€' },
-  { key: 'savings_rate', label: 'Taux d’épargne mensuel', emoji: '🏦', unit: '%' },
-  { key: 'cash_buffer', label: 'Épargne de précaution', emoji: '🛟', unit: '€' },
+  { key: 'net_worth', label: 'Patrimoine total', emoji: glyph('chart'), unit: '€' },
+  { key: 'savings_rate', label: 'Taux d’épargne mensuel', emoji: glyph('bank'), unit: '%' },
+  { key: 'cash_buffer', label: 'Épargne de précaution', emoji: glyph('buoy'), unit: '€' },
   { key: 'asset_quantity', label: 'Quantité d’un actif', emoji: '₿', unit: '' },
 ];
 
@@ -281,7 +282,7 @@ export async function goalsScreen() {
 
       if (!goals.length) {
         mount(body, emptyState({
-          emoji: '🎯',
+          emoji: glyph('target'),
           title: 'Aucun objectif',
           body: 'Fixez une cible : WALLET vous montrera où vous en êtes, sans vous juger.',
           action: h('button.btn.btn--primary', {
@@ -306,7 +307,7 @@ export async function goalsScreen() {
           },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px' } },
               h('div',
-                h('div.eyebrow', `${goal.emoji ?? kind?.emoji ?? '🎯'} ${goal.label}`),
+                h('div.eyebrow', `${goal.emoji ?? kind?.emoji ?? glyph('target')} ${goal.label}`),
                 h('div.num.sensitive', { style: { fontSize: '26px', fontWeight: '700', marginTop: '4px' } },
                   known
                     ? formatGoal(current, goal.kind)
@@ -389,7 +390,7 @@ function editGoal(goal, onChange) {
                 kind: kind.value,
                 target_value: Number(target.value),
                 target_date: date.value || null,
-                emoji: GOAL_KINDS.find((k) => k.key === kind.value)?.emoji ?? '🎯',
+                emoji: GOAL_KINDS.find((k) => k.key === kind.value)?.emoji ?? glyph('target'),
               });
               close();
               toast('Objectif enregistré', { kind: 'success' });
