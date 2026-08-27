@@ -7,6 +7,7 @@
  */
 
 import { h, mount, icon } from '../lib/dom.js';
+import { glyph } from '../components/icons.js';
 import { navigate } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
@@ -46,12 +47,12 @@ export async function profileScreen() {
   /* Portes vers les écrans détaillés */
   screen.append(section('Configuration', {},
     h('div.rows',
-      navRow('🏦', 'Comptes et connexions', 'Banque, Kraken, OKX', '/profil/comptes'),
-      navRow('🏷️', 'Catégories', 'Renommer, budgets, couleurs', '/profil/categories'),
-      navRow('📏', 'Règles et mémoire', 'Ce que WALLET a appris', '/banque/regles'),
-      navRow('🔔', 'Alertes', 'Prix, score, budget', '/profil/alertes'),
-      navRow('🎯', 'Objectifs', 'Patrimoine, épargne', '/profil/objectifs'),
-      navRow('⚙️', 'Paramètres du moteur', 'Poids du score, zones, scénarios', '/profil/moteur'),
+      navRow(glyph('bank'), 'Comptes et connexions', 'Banque, Kraken, OKX', '/profil/comptes'),
+      navRow(glyph('tag'), 'Catégories', 'Renommer, budgets, couleurs', '/profil/categories'),
+      navRow(glyph('ruler'), 'Règles et mémoire', 'Ce que WALLET a appris', '/banque/regles'),
+      navRow(glyph('bell'), 'Alertes', 'Prix, score, budget', '/profil/alertes'),
+      navRow(glyph('target'), 'Objectifs', 'Patrimoine, épargne', '/profil/objectifs'),
+      navRow(glyph('settings'), 'Paramètres du moteur', 'Poids du score, zones, scénarios', '/profil/moteur'),
     ),
   ));
 
@@ -64,7 +65,7 @@ export async function profileScreen() {
 function identityCard(profile) {
   const avatar = h('div.avatar', {
     style: { width: '64px', height: '64px', fontSize: '22px', fontWeight: '700' },
-  }, repo.isDemoMode() ? '🧪' : initials(profile?.full_name, profile?.email));
+  }, repo.isDemoMode() ? glyph('flask') : initials(profile?.full_name, profile?.email));
 
   if (profile?.avatar_path) {
     repo.getAvatarUrl(profile.avatar_path).then((url) => {
@@ -540,7 +541,7 @@ function editCategory(category, onChange) {
             await repo.saveCategory({
               id: category.id,
               label: label.value.trim(),
-              emoji: emoji.value.trim() || '📦',
+              emoji: emoji.value.trim() || glyph('box'),
               budget_month: budget.value ? Number(budget.value) : null,
             });
             close();
