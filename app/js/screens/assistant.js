@@ -59,7 +59,7 @@ function buildPanel(close, initialQuestion) {
 
   mount(container,
     h('p.muted', { style: { fontSize: 'var(--fs-sm)' } },
-      'Les réponses sont calculées sur votre appareil, à partir de vos données. Rien n’est envoyé à un service externe.'),
+      'Les questions courantes sont calculées sur votre appareil. Pour les autres, seuls des totaux — jamais vos opérations — sont envoyés à l’IA.'),
     thread,
     suggestionChips(ask),
     form,
@@ -83,7 +83,26 @@ function buildPanel(close, initialQuestion) {
       });
     }
 
-    pending.replaceWith(renderAnswer(result, { close, ask }));
+    // Le moteur local couvre les questions cadrées. Pour tout le reste, on
+    // passe la main à l'IA plutôt que de répondre « je ne sais pas ».
+    if (result?.intent === 'unknown' && !repo.isDemoMode()) {
+      pending.replaceWith(h('div.card', h('span.muted', 'Je réfléchis…')));
+      const thinking = thread.lastElementChild;
+      try {
+        const remote = await repo.askAssistant(question);
+        result = {
+          intent: 'llm',
+          text: remote?.answer || result.text,
+          evidence: remote?.evidence ?? [],
+          caveat: 'Réponse rédigée par une IA à partir de vos chiffres. Vérifiez ce qui compte.',
+        };
+      } catch (error) {
+        result = { ...result, caveat: error.message };
+      }
+      thinking.replaceWith(renderAnswer(result, { close, ask }));
+    } else {
+      pending.replaceWith(renderAnswer(result, { close, ask }));
+    }
     repo.logAssistant?.({ role: 'user', content: question, intent: result.intent, engine: 'local' })
       .catch(() => {});
   }
