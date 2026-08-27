@@ -15,7 +15,7 @@
  * Rien n'est mis en cache pour les requêtes authentifiées, même en lecture.
  */
 
-const VERSION = 'wallet-v1.0.5';
+const VERSION = 'wallet-v1.0.6';
 const SHELL = `${VERSION}-shell`;
 
 const SHELL_ASSETS = [
