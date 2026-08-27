@@ -231,6 +231,8 @@ export const demoBackend = {
     return { ...(await this.getProfile()), ...persisted.settings.profile };
   },
 
+  async lastTransactionDate() { return null; },
+
   async askAssistant() {
     return {
       ok: false,
