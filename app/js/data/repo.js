@@ -132,7 +132,7 @@ export const updateSettings = async (patch) => {
 export const seedDefaults = () => backend.seedDefaults?.();
 export const getFxRates = () => cached('fx', 30 * MIN, () => backend.getFxRates?.() ?? {});
 export const lastTransactionDate = () => backend.lastTransactionDate?.() ?? Promise.resolve(null);
-export const askAssistant = (question) => backend.askAssistant?.(question);
+export const askAssistant = (question, extra = {}) => backend.askAssistant?.(question, extra);
 export const categorizeWithAI = async () => {
   const result = await backend.categorizeWithAI?.();
   // Le classement change les catégories : sans purge du cache, l'écran
@@ -494,9 +494,51 @@ const round2 = (n) => Math.round(n * 100) / 100;
 
 export const getScoreModel = () => cached('scoreModel', 5 * MIN, () => backend.getScoreModel());
 export const saveScoreModel = async (m) => { invalidate('scoreModel'); invalidate('score'); return backend.saveScoreModel(m); };
-export const listScenarios = (assetId) => cached(`scenarios:${assetId}`, 5 * MIN, () => backend.listScenarios(assetId));
+/**
+ * Scénarios par défaut : un compte neuf n'en a aucun en base, et l'écran
+ * affichait « aucun scénario défini ». Ceux-ci servent tant que l'utilisateur
+ * n'a pas enregistré les siens (Opportunités → Scénarios → Modifier).
+ */
+export const DEFAULT_SCENARIOS = [
+  { name: 'Bear', kind: 'bear', probability: 0.25, horizon_month: 12,
+    assumptions: { multiple_of_200w_ma: 1.0, note: 'Récession, liquidité en repli' } },
+  { name: 'Base', kind: 'base', probability: 0.5, horizon_month: 12,
+    assumptions: { multiple_of_200w_ma: 2.4, note: 'Cycle historique moyen' } },
+  { name: 'Bull', kind: 'bull', probability: 0.25, horizon_month: 12,
+    assumptions: { multiple_of_200w_ma: 4.0, note: 'Adoption et liquidité fortes' } },
+];
+
+export const listScenarios = (assetId) => cached(`scenarios:${assetId}`, 5 * MIN, async () => {
+  const rows = await backend.listScenarios(assetId).catch(() => []);
+  const usable = (rows || []).filter((s) => Number.isFinite(Number(s.assumptions?.multiple_of_200w_ma)));
+  return usable.length ? usable : DEFAULT_SCENARIOS.map((s) => ({ ...s, asset_id: assetId, is_default: true }));
+});
 export const saveScenarios = async (assetId, s) => { invalidate(`scenarios:${assetId}`); return backend.saveScenarios(assetId, s); };
-export const listAltRatios = (assetId) => cached(`ratios:${assetId}`, 5 * MIN, () => backend.listAltRatios(assetId));
+/**
+ * Ratios ALT/BTC. Sans ratio saisi, ils sont CALCULÉS à partir de
+ * l'historique des deux actifs : plus haut, médiane et ratio actuel. Avant,
+ * un compte sans ratio enregistré n'affichait aucune projection.
+ */
+export const listAltRatios = (assetId, btcId) => cached(`ratios:${assetId}`, 5 * MIN, async () => {
+  const saved = await backend.listAltRatios(assetId).catch(() => []);
+  if (saved?.length) return saved;
+  if (!btcId || assetId === btcId) return [];
+  const [alt, btc] = await Promise.all([getPriceHistory(assetId, 1500), getPriceHistory(btcId, 1500)]);
+  const btcByDay = new Map((btc || []).map((p) => [String(p.day).slice(0, 10), Number(p.close)]));
+  const ratios = (alt || [])
+    .map((p) => {
+      const b = btcByDay.get(String(p.day).slice(0, 10));
+      return b > 0 && Number(p.close) > 0 ? Number(p.close) / b : null;
+    })
+    .filter((r) => Number.isFinite(r));
+  if (!ratios.length) return [];
+  const sorted = ratios.slice().sort((a, b) => a - b);
+  return [
+    { asset_id: assetId, label: 'Plus haut historique', ratio: sorted[sorted.length - 1], source: 'historical_high' },
+    { asset_id: assetId, label: 'Médiane historique', ratio: sorted[Math.floor(sorted.length / 2)], source: 'historical_median' },
+    { asset_id: assetId, label: 'Ratio actuel', ratio: ratios[ratios.length - 1], source: 'current' },
+  ];
+});
 export const saveAltRatios = async (assetId, r) => { invalidate(`ratios:${assetId}`); return backend.saveAltRatios(assetId, r); };
 
 export const listAlerts = () => cached('alerts', MIN, () => backend.listAlerts());

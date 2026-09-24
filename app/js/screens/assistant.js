@@ -15,8 +15,9 @@ import { money, pct, num, day as fmtDay } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import {
   detectIntent, extractSymbol, extractCategory, extractAmount, extractPeriod,
-  answer, unknownAnswer, SUGGESTIONS,
+  answer, unknownAnswer, SUGGESTIONS, detectCurrencySwitch,
 } from '../engine/assistant.js';
+import { setDisplayCurrency, canDisplay, displayCurrency } from '../lib/currency.js';
 import { projectPortfolio } from '../engine/scenarios.js';
 import { computeIndicators } from '../engine/indicators.js';
 import { computeInvestmentScore, ZONE_META } from '../engine/score.js';
@@ -42,9 +43,9 @@ function buildPanel(close, initialQuestion) {
     autocomplete: 'off',
   });
 
-  const form = h('form', {
-    style: { display: 'flex', gap: '10px', marginTop: '20px', position: 'sticky', bottom: '0',
-      background: 'var(--bg-elevated)', paddingBlock: '12px' },
+  // Barre de saisie en verre, bords arrondis : l'ancien fond opaque formait
+  // un rectangle à angles droits par-dessus la feuille.
+  const form = h('form.ask-form', {
     onsubmit: (event) => {
       event.preventDefault();
       const question = input.value.trim();
@@ -53,9 +54,8 @@ function buildPanel(close, initialQuestion) {
       ask(question);
     },
   },
-    h('div.field', { style: { flex: '1', margin: '0' } }, input),
-    h('button.btn.btn--primary', { type: 'submit', 'data-sound': 'select',
-      style: { minWidth: '56px', padding: '0 18px' }, 'aria-label': 'Envoyer' }, glyph('arrowUp')),
+    input,
+    h('button.ask-form__send', { type: 'submit', 'data-sound': 'select', 'aria-label': 'Envoyer' }, glyph('arrowUp')),
   );
 
   mount(container,
@@ -65,6 +65,11 @@ function buildPanel(close, initialQuestion) {
     suggestionChips(ask),
     form,
   );
+
+  // Mémoire de la conversation : sans elle, « et en dollars ? » arrivait
+  // seul et l'IA répondait qu'elle n'avait aucun montant.
+  const conversation = [];
+  let lastQuestion = null;
 
   async function ask(question) {
     feedback.select();
@@ -76,7 +81,24 @@ function buildPanel(close, initialQuestion) {
 
     let result;
     try {
-      result = await resolve(question);
+      const currency = lastQuestion ? detectCurrencySwitch(question) : null;
+      if (currency) {
+        // Relance de devise : on bascule l'affichage et on reformule la
+        // dernière réponse, avec les mêmes chiffres convertis.
+        if (!canDisplay(currency)) {
+          result = answer({ intent: 'currency', text: `Je n'ai pas encore de taux de change pour ${currency}. Réessayez une fois connecté à Internet.` });
+        } else {
+          if (displayCurrency() !== currency) setDisplayCurrency(currency);
+          const again = await resolve(lastQuestion);
+          result = again?.intent
+            ? { ...again, intent: 'currency', text: `En ${({ USD: 'dollars', EUR: 'euros', GBP: 'livres', CHF: 'francs suisses' })[currency]} : ${again.text}` }
+            : null;
+        }
+      }
+      if (!result) {
+        result = await resolve(question);
+        if (result?.intent) lastQuestion = question;
+      }
     } catch (error) {
       result = answer({
         text: "Je n'ai pas réussi à aller chercher la réponse. La source de données est peut-être indisponible.",
@@ -94,7 +116,10 @@ function buildPanel(close, initialQuestion) {
       let remoteError = null;
       if (!repo.isDemoMode()) {
         try {
-          const remote = await repo.askAssistant(question);
+          const remote = await repo.askAssistant(question, {
+            history: conversation.slice(-8),
+            context: await clientContext().catch(() => null),
+          });
           if (remote?.answer) {
             result = {
               intent: 'llm',
@@ -123,6 +148,7 @@ function buildPanel(close, initialQuestion) {
     } else {
       pending.replaceWith(renderAnswer(result, { close, ask }));
     }
+    conversation.push({ role: 'user', content: question }, { role: 'assistant', content: result.text });
     // Journal facultatif : son absence ou son échec ne doit rien casser.
     Promise.resolve(repo.logAssistant?.({ role: 'user', content: question, intent: result.intent, engine: 'local' }))
       .catch(() => {});
@@ -130,6 +156,33 @@ function buildPanel(close, initialQuestion) {
 
   if (initialQuestion) queueMicrotask(() => ask(initialQuestion));
   return container;
+}
+
+/**
+ * Totaux calculés par l'application, envoyés à l'IA avec la question : ce
+ * sont les MÊMES chiffres que ceux affichés, et jamais la liste des opérations.
+ */
+async function clientContext() {
+  const [nw, month, holdings] = await Promise.all([
+    repo.getNetWorth(), repo.monthlySummary().catch(() => null), repo.getHoldings().catch(() => []),
+  ]);
+  const { getRates } = await import('../lib/currency.js');
+  const bySymbol = new Map();
+  for (const hold of holdings) {
+    if (!Number.isFinite(hold.value) || hold.value < 1) continue;
+    bySymbol.set(hold.symbol, (bySymbol.get(hold.symbol) ?? 0) + hold.value);
+  }
+  return {
+    currency: 'EUR',
+    net_worth: Math.round(nw.total),
+    crypto: Math.round(nw.crypto),
+    cash_including_stablecoins: Math.round(nw.cash),
+    change_30d: Number.isFinite(nw.change_30d) ? Math.round(nw.change_30d) : null,
+    month_expense: month ? Math.round(Number(month.expense)) : null,
+    month_income: month ? Math.round(Number(month.income)) : null,
+    positions_eur: Object.fromEntries([...bySymbol.entries()].map(([k, v]) => [k, Math.round(v)])),
+    fx_from_eur: getRates(),
+  };
 }
 
 function suggestionChips(ask) {
@@ -158,7 +211,7 @@ function bubble(text, who) {
 
 function renderAnswer(result, { close, ask }) {
   return h('div.card',
-    h('p', result.text),
+    h('p', { style: { color: 'var(--text)', fontWeight: '500' } }, result.text),
 
     result.evidence?.length
       ? h('div.rows', { style: { marginTop: '16px' } },

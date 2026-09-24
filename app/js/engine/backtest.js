@@ -26,7 +26,7 @@ const DAY = 86400000;
  * @param {object} options
  *   strategy: 'dca' | 'lump_sum' | 'score_based'
  *   amount: montant investi par période (dca) ou en une fois (lump_sum)
- *   cadence: 'weekly' | 'monthly'
+ *   cadence: 'daily' | 'weekly' | 'monthly'
  *   from, to: bornes ISO
  *   scoreThreshold: pour 'score_based', score minimal pour investir
  *   scoreMultiplier: investir plus quand le score est haut
@@ -43,12 +43,19 @@ export function backtest(history, options = {}) {
     model = {},
   } = options;
 
-  const series = normalizeSeries(history, from, to);
-  if (series.length < 60) {
+  // L'historique COMPLET reste disponible pour les indicateurs (la stratégie
+  // pilotée par le score a besoin du passé d'avant la date de départ) ; seuls
+  // les jours de la période choisie donnent lieu à des décisions.
+  const full = normalizeSeries(history, null, to);
+  const fromT = from ? new Date(from).getTime() : -Infinity;
+  const startIndex = full.findIndex((p) => p.t >= fromT);
+  const series = startIndex < 0 ? [] : full.slice(startIndex);
+  const minPoints = from || to ? 2 : 60;
+  if (series.length < minPoints) {
     return { available: false, reason: 'historique trop court pour une simulation crédible' };
   }
 
-  const cadenceDays = cadence === 'weekly' ? 7 : 30;
+  const cadenceDays = ({ daily: 1, weekly: 7, monthly: 30 })[cadence] ?? 30;
   const trades = [];
   const equity = [];
 
@@ -60,9 +67,11 @@ export function backtest(history, options = {}) {
     const today = series[i];
 
     /* --- Aucune donnée au-delà de i n'est accessible ici. ------------- */
-    const visible = sliceUpTo(series, i);
+    const visible = sliceUpTo(full, startIndex + i);
 
-    const isCadenceDay = (today.t - lastBuy) / DAY >= cadenceDays;
+    // Demi-journée de marge : une bougie quotidienne peut être datée à
+    // quelques heures près, et « tous les jours » doit acheter chaque jour.
+    const isCadenceDay = (today.t - lastBuy) / DAY >= cadenceDays - 0.5;
     let buyAmount = 0;
 
     if (strategy === 'lump_sum') {

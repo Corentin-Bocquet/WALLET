@@ -7,7 +7,7 @@
 
 import { h, mount } from '../lib/dom.js';
 import { glyph } from '../components/icons.js';
-import { navigate } from '../lib/router.js';
+import { navigate, refresh } from '../lib/router.js';
 import { openSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import {
@@ -33,7 +33,13 @@ export async function opportunitiesScreen() {
     'Ce que disent les données aujourd’hui, pas ce qui va se passer.'));
 
   const zones = h('div');
-  screen.append(section('Zones actuelles', { explain: 'investment_score' }, zones));
+  screen.append(section('Zones actuelles', {
+    explain: 'investment_score',
+    // Les zones portent sur VOTRE liste : on y ajoute ou retire des cryptos.
+    action: h('button.btn.btn--ghost.btn--sm', {
+      type: 'button', 'data-sound': 'sheetOpen', onclick: () => pickCryptos(),
+    }, '+ Cryptos'),
+  }, zones));
   mount(zones, loadingRows(4));
 
   const scenarios = h('div');
@@ -50,7 +56,7 @@ export async function opportunitiesScreen() {
 
   const backtest = h('div');
   screen.append(section('Et si j’avais…', { explain: 'dca' }, backtest));
-  mount(backtest, loadingBlock(160));
+  mount(backtest, loadingBlock(220));
 
   renderAll({ zones, scenarios, alts, backtest });
   return screen;
@@ -116,11 +122,14 @@ async function renderAll(hosts) {
             h('div.row__sub', zoneTag(zone)),
           ),
           h('div.row__end',
-            h('div.row__value', { style: { color: zone.color } },
-              result.score === null ? '—' : fmtScore(result.score)),
-            h('div.row__sub', result.confidence < 0.75
-              ? `${Math.round(result.confidence * 100)} % de facteurs`
-              : '/100'),
+            // La note en grand, en gras, sur une pastille teintée de la
+            // couleur de sa zone : lisible même quand la zone est jaune.
+            h('span.score-pill.num', { style: { '--zone': zone.color ?? 'var(--neutral)' } },
+              result.score === null ? '—' : fmtScore(result.score),
+              h('small', '/100')),
+            result.confidence < 0.75
+              ? h('div.row__sub', `${Math.round(result.confidence * 100)} % de facteurs`)
+              : null,
           ),
         );
       })),
@@ -135,15 +144,16 @@ async function renderAll(hosts) {
   } else {
     await renderScenarios(hosts.scenarios, btc);
     await renderAlts(hosts.alts, btc, assets);
-    await renderBacktest(hosts.backtest, btc, model);
+    await renderSimulator(hosts.backtest, btc, assets, model);
   }
 }
 
 function zoneLegend(model) {
   const thresholds = model?.zone_thresholds || {};
-  return h('div.card',
-    h('div.eyebrow', 'Comment lire ces zones'),
-    h('div', { style: { marginTop: '14px' } }, zoneBar(null, thresholds)),
+  // Repliée par défaut : la légende sert une fois, elle n'a pas à occuper
+  // un écran entier à chaque visite.
+  return accordion('Comment lire ces zones', () => h('div',
+    h('div', { style: { marginTop: '8px' } }, zoneBar(null, thresholds)),
     h('div.rows', { style: { marginTop: '12px' } },
       Object.entries(ZONE_META).reverse().map(([key, meta]) => h('div.row', {
         style: { gridTemplateColumns: 'auto 1fr auto', minHeight: '44px' },
@@ -155,7 +165,7 @@ function zoneLegend(model) {
       ))),
     h('p.explain__source', { style: { marginTop: '12px' } },
       'Ces seuils sont les vôtres : modifiez-les dans Profil → Paramètres du moteur.'),
-  );
+  ));
 }
 
 async function renderScenarios(host, btc) {
@@ -216,69 +226,99 @@ async function renderScenarios(host, btc) {
   }
 }
 
+/** Cryptos proposées en premier : celles que l'on détient, puis sa liste. */
+async function preferredAlts(assets) {
+  const [holdings, watch] = await Promise.all([
+    repo.getHoldings().catch(() => []), repo.getWatchlist().catch(() => []),
+  ]);
+  const usable = assets.filter((a) => a.symbol !== 'BTC' && !repo.isStablecoin(a.symbol));
+  const order = [...new Set([
+    ...holdings.map((hold) => hold.asset_id), ...watch.map((w) => w.id), ...usable.map((a) => a.id),
+  ])];
+  return order.map((id) => usable.find((a) => a.id === id)).filter(Boolean);
+}
+
 async function renderAlts(host, btc, assets) {
   try {
-    const alts = assets.filter((a) => a.symbol !== 'BTC').slice(0, 6);
-    if (!alts.length) { mount(host, h('div')); return; }
+    const alts = await preferredAlts(assets);
+    if (!alts.length) { mount(host, emptyState({ emoji: glyph('coin'), title: 'Aucune autre crypto suivie' })); return; }
 
-    const scenarios = await repo.listScenarios(btc.id);
-    const history = await repo.getPriceHistory(btc.id, 1500);
+    const [scenarios, history, holdings] = await Promise.all([
+      repo.listScenarios(btc.id), repo.getPriceHistory(btc.id, 1500), repo.getHoldings().catch(() => []),
+    ]);
     const computed = computeIndicators(history);
     const projection = projectFromMa200w(computed.ma200w?.reference, scenarios);
-    const defaultBtcTarget = projection.available ? projection.central : (btc.quote?.price ?? null);
+    const btcNow = btc.quote?.price ?? computed.price ?? null;
 
-    let btcTarget = defaultBtcTarget;
-    const container = h('div');
+    let btcTarget = projection.available ? projection.central : btcNow;
+    let alt = alts[0];
+    const container = h('div.card');
+
+    // Raccourcis de prix : les scénarios et le prix actuel, en un tap.
+    const presets = [
+      ...(projection.available ? projection.projections.map((p) => ({ label: p.name, value: p.target })) : []),
+      btcNow ? { label: 'Actuel', value: btcNow } : null,
+    ].filter(Boolean);
 
     const paint = async () => {
-      const rows = [];
-      for (const alt of alts) {
-        const ratios = await repo.listAltRatios(alt.id).catch(() => []);
-        const result = projectAltFromBtc({
-          btcPrice: btcTarget,
-          ratios,
-          currentAltPrice: alt.quote?.price ?? null,
-        });
-        if (!result.available) continue;
-        rows.push({ alt, result });
-      }
+      const ratios = await repo.listAltRatios(alt.id, btc.id).catch(() => []);
+      const result = projectAltFromBtc({ btcPrice: btcTarget, ratios, currentAltPrice: alt.quote?.price ?? null });
+      const held = holdings.filter((hold) => hold.asset_id === alt.id)
+        .reduce((sum, hold) => sum + (Number(hold.quantity) || 0), 0);
+
+      const input = h('input', {
+        type: 'number', step: '1000', min: '0', value: Math.round(btcTarget ?? 0),
+        inputmode: 'numeric', 'aria-label': 'Prix du Bitcoin', class: 'big-input',
+        onchange: (event) => { btcTarget = Number(event.target.value) || btcTarget; paint(); },
+      });
 
       mount(container,
-        h('div.card',
-          h('div.eyebrow', 'Si le Bitcoin atteignait'),
-          h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '10px' } },
-            h('input', {
-              type: 'number', step: '1000', value: Math.round(btcTarget ?? 0),
-              inputmode: 'numeric', 'aria-label': 'Prix Bitcoin hypothétique',
-              style: { background: 'var(--surface-2)', borderRadius: 'var(--r-md)',
-                padding: '12px 14px', flex: '1', fontWeight: '700', fontSize: '20px' },
-              onchange: (event) => { btcTarget = Number(event.target.value) || btcTarget; paint(); },
-            }),
-            h('span.muted', '€'),
-          ),
+        h('div.eyebrow', '1. Le Bitcoin atteint…'),
+        h('div', { style: { display: 'flex', gap: '10px', alignItems: 'center', marginTop: '10px' } },
+          input, h('span.muted', { style: { fontWeight: '700' } }, '€')),
+        h('div.chip-line', presets.map((p) => h('button.chip', {
+          type: 'button', 'data-sound': 'select',
+          'aria-pressed': String(Math.round(p.value) === Math.round(btcTarget ?? -1)),
+          onclick: () => { btcTarget = p.value; paint(); },
+        }, `${p.label} · ${money(p.value, { compact: true, decimals: 0 })}`))),
 
-          h('div.rows', { style: { marginTop: '16px' } },
-            rows.map(({ alt, result }) => h('div.row',
-              assetAvatar(alt),
-              h('div.row__main',
-                h('div.row__title', alt.symbol),
-                h('div.row__sub', `Prix actuel ${money(alt.quote?.price)}`),
-              ),
-              h('div.row__end',
-                h('div.row__value', range(result.low, result.high, { decimals: undefined })),
-                h('div.row__sub', alt.quote?.price
-                  ? `${(result.central / alt.quote.price).toFixed(1)}× médian` : null),
-              ),
-            ))),
+        h('div.eyebrow', { style: { marginTop: '20px' } }, '2. Pour quelle crypto ?'),
+        h('div.chip-line', alts.slice(0, 8).map((a) => h('button.chip', {
+          type: 'button', 'data-sound': 'select', 'aria-pressed': String(a.id === alt.id),
+          onclick: () => { alt = a; paint(); },
+        }, a.symbol))),
+        alts.length > 8 ? h('select.chip-select', {
+          'aria-label': 'Autre crypto',
+          onchange: (event) => { alt = alts.find((a) => a.id === event.target.value) ?? alt; paint(); },
+        }, h('option', { value: '' }, 'Autre crypto…'),
+          alts.slice(8).map((a) => h('option', { value: a.id, selected: a.id === alt.id }, `${a.symbol} · ${a.name}`))) : null,
 
-          rows.length
-            ? h('div.notice.notice--warn', { style: { marginTop: '16px' } },
-                h('span', glyph('alert')),
-                h('div',
-                  h('strong', 'Ce que ce calcul ne dit pas'),
-                  h('ul', { style: { margin: '6px 0 0', paddingLeft: '18px' } },
-                    rows[0].result.caveats.map((c) => h('li', { style: { marginTop: '4px' } }, c)))))
-            : null,
+        h('div.result-block',
+          result.available
+            ? [
+                h('div.eyebrow', `3. ${alt.symbol} vaudrait`),
+                h('div.display.num', { style: { fontSize: '28px', marginTop: '4px' } },
+                  range(result.low, result.high, { decimals: undefined })),
+                h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } },
+                  `Prix actuel ${money(alt.quote?.price)}`,
+                  alt.quote?.price ? ` · soit ${(result.central / alt.quote.price).toFixed(1)}× au ratio médian` : ''),
+                h('div.rows', { style: { marginTop: '12px' } }, result.results.map((r) => h('div.row',
+                  { style: { gridTemplateColumns: '1fr auto', minHeight: '46px' } },
+                  h('div.row__main',
+                    h('div.row__title', { style: { fontWeight: '500' } }, r.label),
+                    h('div.row__sub', `ratio ${num(r.ratio, { decimals: 6 })} BTC`)),
+                  h('div.row__end',
+                    h('div.row__value', money(r.target)),
+                    r.multiple_vs_now ? h('div.row__sub', `${r.multiple_vs_now}× aujourd’hui`) : null),
+                ))),
+                held > 0 ? h('div.notice', { style: { marginTop: '12px' } }, h('span', glyph('wallet')),
+                  h('div', h('strong', `Vos ${num(held)} ${alt.symbol}`),
+                    `vaudraient ${range(result.low * held, result.high * held)} (${money(result.central * held, { decimals: 0 })} au ratio médian).`)) : null,
+                h('p.explain__source', { style: { marginTop: '12px' } },
+                  'Prix = prix du Bitcoin × ratio ' + alt.symbol + '/BTC, calculé sur l’historique des deux cours. '
+                  + result.caveats.join(' ')),
+              ]
+            : h('p.muted', 'Pas assez d’historique commun entre ' + alt.symbol + ' et le Bitcoin pour calculer un ratio.'),
         ),
       );
     };
@@ -290,53 +330,139 @@ async function renderAlts(host, btc, assets) {
   }
 }
 
-async function renderBacktest(host, btc, model) {
+/* — Simulateur « Et si… » ———————————————————————————————— */
+
+async function renderSimulator(host, btc, assets, model) {
   try {
-    const history = await repo.getPriceHistory(btc.id, 1500);
-    const comparison = compareStrategies(history, { amount: 100, cadence: 'monthly', model });
+    const { simulate, HORIZON_UNITS, STRATEGIES } = await import('../engine/simulator.js');
+    const alts = await preferredAlts(assets);
+    const choices = [btc, ...alts].slice(0, 8);
+    const today = new Date().toISOString().slice(0, 10);
+    const [btcHistory, scenarios] = await Promise.all([
+      repo.getPriceHistory(btc.id, 2200), repo.listScenarios(btc.id),
+    ]);
 
-    if (!comparison.runs.length) {
-      mount(host, h('div.notice', h('span', 'ℹ'),
-        h('div', h('strong', 'Simulation impossible'), 'Historique de prix trop court.')));
-      return;
-    }
+    const state = { asset: btc, amount: 100, start: today, value: 1, unit: 'years', strategy: 'dca' };
+    const card = h('div.card.simulator');
+    const results = h('div');
 
-    mount(host, h('div.card',
-      h('div.eyebrow', '100 € investis chaque mois depuis le début de l’historique'),
+    const shiftDate = (years) => {
+      const d = new Date(`${today}T00:00:00Z`);
+      d.setUTCFullYear(d.getUTCFullYear() + years);
+      return d.toISOString().slice(0, 10);
+    };
 
-      h('div.rows', { style: { marginTop: '16px' } },
-        comparison.runs.map(({ key, label, result }) => h('div.row',
-          h('div.avatar.avatar--dot', {
-            style: { background: key === comparison.best ? 'var(--accent)' : 'var(--surface-3)' },
-          }),
-          h('div.row__main',
-            h('div.row__title', label, key === comparison.best ? badge('meilleur', 'accent') : null),
-            h('div.row__sub', `${result.trades} ${result.trades > 1 ? 'achats' : 'achat'} · ${money(result.invested, { decimals: 0 })} investis`),
-          ),
-          h('div.row__end',
-            h('div.row__value.sensitive', money(result.final_value, { decimals: 0 })),
-            h('div.row__sub', { class: trendClass(result.roi_pct) }, pct(result.roi_pct)),
-          ),
-        ))),
+    const paintControls = () => {
+      const unit = HORIZON_UNITS[state.unit];
+      const dateInput = h('input.date-input', {
+        type: 'date', value: state.start, 'aria-label': 'Date de début',
+        onchange: (event) => { if (event.target.value) { state.start = event.target.value; update(); } },
+      });
+      const amountInput = h('input.amount-input', {
+        type: 'number', min: '1', step: '10', inputmode: 'decimal', value: state.amount, 'aria-label': 'Montant par achat',
+        onchange: (event) => { state.amount = Math.max(1, Number(event.target.value) || state.amount); update(); },
+      });
+      mount(card,
+        h('div.eyebrow', 'Crypto'),
+        h('div.chip-line', choices.map((a) => h('button.chip', {
+          type: 'button', 'data-sound': 'select', 'aria-pressed': String(a.id === state.asset.id),
+          onclick: () => { state.asset = a; update(); },
+        }, a.symbol))),
 
-      accordion('Voir le détail des simulations', () => h('div.rows',
-        comparison.runs.map(({ label, result }) => h('div', { style: { paddingBlock: '12px' } },
-          h('div', { style: { fontWeight: '600', marginBottom: '8px' } }, label),
-          detailLine('Période', `${fmtDay(result.period_start)} → ${fmtDay(result.period_end)}`),
-          detailLine('Prix de revient moyen', money(result.average_cost)),
-          detailLine('Rendement annualisé', pct(result.annualized_pct)),
-          detailLine('Pire baisse traversée', pct(result.max_drawdown_pct)),
-          result.skipped ? detailLine('Périodes écartées par le score', String(result.skipped)) : null,
-        )))),
+        h('div.eyebrow', { style: { marginTop: '18px' } }, 'Montant par achat'),
+        h('div.chip-line', [25, 50, 100, 250, 500].map((v) => h('button.chip', {
+          type: 'button', 'data-sound': 'select', 'aria-pressed': String(state.amount === v),
+          onclick: () => { state.amount = v; update(); },
+        }, `${v} €`)), amountInput),
 
-      h('div.notice', { style: { marginTop: '16px' } },
-        h('span', glyph('lock')),
-        h('div',
-          h('strong', 'Aucune donnée future n’est utilisée'),
-          'Chaque décision de la simulation est prise avec les seules données disponibles à sa date. C’est vérifié par un test automatique qui injecte une valeur aberrante dans le futur : le résultat ne bouge pas.')),
+        h('div.eyebrow', { style: { marginTop: '18px' } }, 'À partir du'),
+        h('div.chip-line',
+          [['Il y a 3 ans', -3], ['Il y a 1 an', -1], ['Aujourd’hui', 0], ['Dans 1 an', 1]].map(([label, years]) => h('button.chip', {
+            type: 'button', 'data-sound': 'select', 'aria-pressed': String(state.start === shiftDate(years)),
+            onclick: () => { state.start = shiftDate(years); update(); },
+          }, label)),
+          dateInput),
 
-      h('p.explain__source', { style: { marginTop: '12px' } }, comparison.note),
-    ));
+        h('div.eyebrow', { style: { marginTop: '18px' } }, 'Pendant'),
+        h('div.horizon',
+          h('div.stepper',
+            h('button', { type: 'button', 'aria-label': 'Moins', 'data-sound': 'tap',
+              onclick: () => { state.value = Math.max(1, state.value - 1); update(); } }, '−'),
+            h('span.num', String(state.value)),
+            h('button', { type: 'button', 'aria-label': 'Plus', 'data-sound': 'tap',
+              onclick: () => { state.value = Math.min(unit.max, state.value + 1); update(); } }, '+')),
+          h('div.segmented', Object.entries(HORIZON_UNITS).map(([key, u]) => h('button', {
+            type: 'button', 'aria-selected': String(key === state.unit), 'data-sound': 'select',
+            onclick: () => { state.unit = key; state.value = Math.min(state.value, u.max); update(); },
+          }, u.label)))),
+        h('div.muted-2', { style: { fontSize: 'var(--fs-xs)', marginTop: '6px' } },
+          `Maximum ${unit.max} ${unit.label} · achat ${unit.cadenceLabel}`),
+        results,
+      );
+    };
+
+    const paintResults = async () => {
+      mount(results, loadingBlock(160));
+      const history = state.asset.id === btc.id ? btcHistory : await repo.getPriceHistory(state.asset.id, 2200);
+      const r = simulate({
+        history, btcHistory, start: state.start, value: state.value, unit: state.unit,
+        amount: state.amount, scenarios, model, today,
+      });
+      if (!r.available) { mount(results, h('div.notice', { style: { marginTop: '18px' } }, h('span', glyph('info')), h('div', r.reason))); return; }
+
+      const chosen = r.strategies[state.strategy];
+      const ranged = chosen.low !== chosen.high;
+      const period = `${fmtDay(r.start, { long: true })} → ${fmtDay(r.end, { long: true })}`;
+
+      mount(results,
+        h('div.sim-kind', badge(({ past: 'Rétrospectif · prix réels', future: 'Projection · cycle du Bitcoin', mixed: 'Passé réel + projection' })[r.kind], r.kind === 'past' ? 'info' : 'accent'),
+          h('span.muted', { style: { fontSize: 'var(--fs-xs)' } }, period)),
+
+        h('div.strategy-grid', STRATEGIES.map((st) => {
+          const res = r.strategies[st.key];
+          return h('button.strategy', {
+            type: 'button', 'data-sound': 'select', 'aria-pressed': String(st.key === state.strategy),
+            onclick: () => { state.strategy = st.key; paintResults(); },
+          },
+            h('span.strategy__label', st.label),
+            h('span.strategy__value.num.sensitive', money(res.final_value, { decimals: 0 })),
+            h('span.strategy__roi.num', { class: trendClass(res.roi_pct) }, pct(res.roi_pct, { decimals: 0 })),
+          );
+        })),
+
+        h('div.sim-detail',
+          h('div.muted', { style: { fontSize: 'var(--fs-sm)' } }, STRATEGIES.find((s) => s.key === state.strategy).hint),
+          h('div.display.num.sensitive', { style: { fontSize: '30px', marginTop: '6px' } },
+            ranged ? range(chosen.low, chosen.high) : money(chosen.final_value, { decimals: 0 })),
+          h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } },
+            `pour ${money(chosen.invested, { decimals: 0 })} investis en ${chosen.buys} ${chosen.buys > 1 ? 'achats' : 'achat'}`,
+            ranged ? ` · scénario central ${money(chosen.final_value, { decimals: 0 })}` : ''),
+          chosen.equity?.length > 2
+            ? h('div', { style: { marginTop: '14px' } },
+                areaChart(chosen.equity.map((e) => ({ day: e.day, value: e.value })), { height: 120, interactive: true }))
+            : null,
+          ranged ? h('div.rows', { style: { marginTop: '10px' } }, chosen.scenarios.map((sc) => h('div.row',
+            { style: { gridTemplateColumns: 'auto 1fr auto', minHeight: '44px' } },
+            h('div.avatar.avatar--dot', { style: { background: ({ bear: 'var(--down)', base: 'var(--zone-neutral)', bull: 'var(--up)' })[sc.kind] } }),
+            h('div.row__main', h('div.row__title', { style: { fontWeight: '500' } }, sc.name)),
+            h('div.row__end',
+              h('div.row__value.num.sensitive', money(sc.final_value, { decimals: 0 })),
+              h('div.row__sub', { class: trendClass(sc.roi_pct) }, pct(sc.roi_pct, { decimals: 0 }))),
+          ))) : null,
+          h('p.explain__source', { style: { marginTop: '12px' } }, r.note),
+        ),
+      );
+    };
+
+    let timer = null;
+    const update = () => {
+      paintControls();
+      clearTimeout(timer);
+      timer = setTimeout(paintResults, 60);
+    };
+
+    update();
+    mount(host, card);
   } catch (error) {
     mount(host, errorState(error, { what: 'la simulation' }));
   }
@@ -347,6 +473,50 @@ function detailLine(label, value) {
     h('span.muted', { style: { fontSize: 'var(--fs-sm)' } }, label),
     h('span.num', { style: { fontSize: 'var(--fs-sm)', fontWeight: '600' } }, value),
   );
+}
+
+/* — Choix des cryptos suivies (zones, listes) ——————————————— */
+
+async function pickCryptos() {
+  const [assets, watch] = await Promise.all([repo.listAssets(), repo.getWatchlist().catch(() => [])]);
+  const followed = new Set(watch.map((w) => w.id));
+  openSheet({
+    title: 'Cryptos suivies',
+    build: ({ close }) => {
+      const search = h('input', { type: 'search', placeholder: 'Rechercher…', 'aria-label': 'Rechercher une crypto' });
+      const list = h('div.rows');
+      const paint = () => {
+        const q = search.value.trim().toLowerCase();
+        mount(list, assets
+          .filter((a) => !repo.isStablecoin(a.symbol))
+          .filter((a) => !q || a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q))
+          .slice(0, 60)
+          .map((a) => h('button.row', {
+            type: 'button', 'data-sound': 'toggle',
+            onclick: async () => {
+              await repo.toggleWatchlist(a.id);
+              if (followed.has(a.id)) followed.delete(a.id); else followed.add(a.id);
+              paint();
+            },
+          },
+            assetAvatar(a),
+            h('div.row__main', h('div.row__title', a.name), h('div.row__sub', a.symbol)),
+            h('div.row__end', h('span.check-dot', { 'aria-checked': String(followed.has(a.id)) },
+              followed.has(a.id) ? glyph('check', 16) : null)),
+          )));
+      };
+      search.addEventListener('input', paint);
+      paint();
+      return h('div',
+        h('p.muted', { style: { fontSize: 'var(--fs-sm)' } },
+          'Les cryptos cochées apparaissent dans les zones, les projections et le simulateur.'),
+        h('div.field', { style: { marginTop: '12px' } }, search),
+        list,
+        h('button.btn.btn--primary.btn--block', { type: 'button', style: { marginTop: '16px' },
+          onclick: () => { close(); refresh(); } }, 'Terminé'),
+      );
+    },
+  });
 }
 
 /* — Édition des scénarios (§29 : tout doit être modifiable) ————— */
@@ -385,7 +555,8 @@ async function editScenarios() {
             return;
           }
           await repo.saveScenarios(btc.id, inputs.map(({ scenario, multiple, probability, note }) => ({
-            ...scenario,
+            // Un scénario par défaut n'existe pas encore en base : il est créé.
+            ...(({ is_default: _d, ...rest }) => rest)(scenario),
             probability: Number(probability.value) / 100,
             assumptions: {
               ...scenario.assumptions,
@@ -395,7 +566,7 @@ async function editScenarios() {
           })));
           close();
           toast('Scénarios enregistrés', { kind: 'success' });
-          setTimeout(() => window.location.reload(), 400);
+          repo.invalidate('scenarios'); refresh();
         },
       },
         h('p.muted', { style: { fontSize: 'var(--fs-sm)' } },

@@ -228,3 +228,95 @@ body::before {
 .donut-legend__pct { color: var(--text-2); }
 .donut-legend__value { display: block; color: var(--text-2); font-size: var(--fs-xs); margin-top: 1px; }
 .show-more { width: 100%; margin-top: var(--sp-3); }
+
+/* — Note de zone : grande, grasse, sur une pastille teintée ——————————— */
+.score-pill {
+  display: inline-flex; align-items: baseline; gap: 2px;
+  padding: 5px 11px; border-radius: var(--r-pill);
+  font-size: 20px; font-weight: 800; letter-spacing: -.02em;
+  color: var(--text);
+  background: color-mix(in srgb, var(--zone) 26%, transparent);
+  box-shadow: inset 0 0 0 1.5px color-mix(in srgb, var(--zone) 70%, transparent);
+}
+.score-pill small { font-size: 11px; font-weight: 600; color: var(--text-2); margin-left: 1px; }
+
+/* — Puces de choix (crypto, montant, date, préréglages) ——————————— */
+.chip-line { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; align-items: center; }
+.chip {
+  padding: 8px 14px; border-radius: var(--r-pill);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--text-2);
+  background: var(--glass-fill); box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+  transition: background var(--dur-fast), color var(--dur-fast), transform var(--dur-fast);
+}
+.chip:active { transform: scale(.95); }
+.chip[aria-pressed="true"] {
+  color: var(--text-on-accent); background: var(--accent);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
+}
+.chip-select, .date-input, .amount-input, .big-input {
+  border-radius: var(--r-pill); padding: 8px 14px; font-weight: 600; font-size: var(--fs-sm);
+  background: var(--glass-fill); box-shadow: inset 0 0 0 1px var(--glass-edge-soft); color: var(--text);
+  min-width: 0;
+}
+.amount-input { width: 96px; }
+.big-input { flex: 1; font-size: 22px; font-weight: 800; padding: 12px 18px; }
+.date-input { color-scheme: dark; }
+:root[data-theme="light"] .date-input { color-scheme: light; }
+.result-block { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--glass-edge-soft); }
+
+/* — Horizon : pas à pas + unité ——————————————————————————————— */
+.horizon { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.stepper {
+  display: inline-flex; align-items: center; gap: 4px; padding: 3px;
+  border-radius: var(--r-pill); background: var(--glass-fill); box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+}
+.stepper button { width: 36px; height: 36px; border-radius: 50%; font-size: 20px; font-weight: 600; background: var(--glass-fill-strong); }
+.stepper span { min-width: 34px; text-align: center; font-size: 18px; font-weight: 800; }
+
+/* — Résultats du simulateur ———————————————————————————————————— */
+.sim-kind { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; margin-top: 22px; }
+.strategy-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.strategy {
+  display: grid; gap: 4px; padding: 12px 10px; border-radius: var(--r-md); text-align: left;
+  background: var(--glass-fill); box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+  transition: box-shadow var(--dur-fast), background var(--dur-fast);
+}
+.strategy[aria-pressed="true"] { background: var(--glass-fill-strong); box-shadow: inset 0 0 0 2px var(--accent); }
+.strategy__label { font-size: 11.5px; font-weight: 600; color: var(--text-2); line-height: 1.2; }
+.strategy__value { font-size: 16px; font-weight: 800; letter-spacing: -.02em; }
+.strategy__roi { font-size: 12px; font-weight: 700; }
+.sim-detail { margin-top: 16px; }
+
+/* — Case cochée (choix des cryptos suivies) ——————————————————————— */
+.check-dot {
+  width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center;
+  box-shadow: inset 0 0 0 1.5px var(--glass-edge);
+}
+.check-dot[aria-checked="true"] { background: var(--accent); color: var(--text-on-accent); box-shadow: none; }
+
+/* — Barre de question de l'assistant : une pilule de verre ——————————— */
+.ask-form {
+  position: sticky; bottom: 0; z-index: 2;
+  display: flex; align-items: center; gap: 8px;
+  margin-top: 20px; padding: 6px 6px 6px 18px;
+  border-radius: var(--r-pill);
+  background: var(--glass-shine), var(--glass-sheet);
+  border: 1px solid var(--glass-edge);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .30), inset 0 1px 0 rgba(255, 255, 255, .14);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  backdrop-filter: blur(24px) saturate(180%);
+}
+.ask-form input {
+  flex: 1; min-width: 0; height: 44px;
+  background: transparent; border: 0; outline: none;
+  font-size: var(--fs-body); color: var(--text);
+}
+.ask-form input::placeholder { color: var(--text-3); }
+.ask-form__send {
+  flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent); color: var(--text-on-accent);
+  transition: transform var(--dur-fast) var(--ease);
+}
+.ask-form__send:active { transform: scale(.9); }
+.ask-form__send svg { width: 20px; height: 20px; }
