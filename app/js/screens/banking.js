@@ -580,7 +580,9 @@ export async function toClassifyScreen() {
   async function paint() {
     try {
       const [transactions, categories] = await Promise.all([
-        repo.listTransactions({ status: 'active', limit: 500 }),
+        // 2 000 et non 500 : au-delà des 500 plus récentes, des opérations
+        // à classer disparaissaient de la file alors que l'accueil les comptait.
+        repo.listTransactions({ status: 'active', limit: 2000 }),
         repo.listCategories(),
       ]);
 
@@ -592,15 +594,30 @@ export async function toClassifyScreen() {
           title: 'Tout est classé',
           body: 'WALLET sait quoi faire de chacune de vos transactions.',
           action: h('button.btn.btn--secondary', { type: 'button', onclick: () => navigate('/banque') },
-            'Retour aux dépenses'),
+            'Retour au budget'),
         }));
         return;
       }
 
+      // Regroupement par marchand : quatorze lignes « Ugc Cine Cite » se
+      // règlent d'un seul geste, pas quatorze.
+      const groups = new Map();
+      for (const tx of pending) {
+        const key = tx.merchant || tx.clean_label || tx.raw_label;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(tx);
+      }
+      const ordered = [...groups.values()].sort((a, b) => b.length - a.length);
+
       mount(body,
         h('p.muted', { style: { marginBottom: '20px' } },
-          `${pending.length} transactions dont WALLET n'est pas sûr. Chaque réponse lui apprend quelque chose.`),
-        h('div.rows', pending.map((tx) => transactionRow(tx, categories, paint))),
+          `${pending.length} ${pending.length > 1 ? 'opérations' : 'opération'} chez `
+          + `${ordered.length} ${ordered.length > 1 ? 'marchands' : 'marchand'}. `
+          + 'Une réponse par marchand suffit : WALLET retiendra.'),
+        h('div', { style: { display: 'grid', gap: '12px' } },
+          ordered.map((items) => (items.length > 1
+            ? pendingGroup(items, categories, paint)
+            : h('div.rows', transactionRow(items[0], categories, paint))))),
       );
     } catch (error) {
       mount(body, errorState(error, { what: 'la file à classer', onRetry: paint }));
@@ -609,6 +626,95 @@ export async function toClassifyScreen() {
 
   await paint();
   return screen;
+}
+
+/**
+ * Carte d'un marchand à classer : la catégorie proposée, confirmable pour
+ * toutes les opérations d'un coup, ou à changer pour toutes.
+ */
+function pendingGroup(items, categories, onChange) {
+  const first = items[0];
+  const name = titleCase(first.merchant || first.clean_label) || first.raw_label;
+  const total = items.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const suggested = categories.find((c) => c.id === first.category_id);
+  const details = h('div.rows', { hidden: true, style: { marginTop: '12px' } },
+    items.map((tx) => transactionRow(tx, categories, onChange)));
+
+  const applyAll = async (category, button) => {
+    if (button) button.disabled = true;
+    try {
+      // Une à une et non en parallèle : chaque correction renforce la
+      // mémoire du marchand, et l'ordre garde un historique lisible.
+      for (const tx of items) await repo.applyCategoryCorrection(tx.id, category.id, false);
+      feedback.success();
+      toast(`${items.length} opérations classées en ${category.label}. WALLET s'en souviendra.`,
+        { kind: 'success' });
+      onChange?.();
+    } catch (error) {
+      toast(`Impossible d'enregistrer : ${error.message}`, { kind: 'error' });
+      if (button) button.disabled = false;
+    }
+  };
+
+  return h('div.card',
+    h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
+      h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
+        first.emoji || glyph('question')),
+      h('div', { style: { flex: '1', minWidth: '0' } },
+        h('div', { style: { fontWeight: '600' } }, name),
+        h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
+          `${items.length} opérations · `, h('span.num.sensitive', money(total, { decimals: 0 }))),
+      ),
+    ),
+    h('p.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '12px' } },
+      suggested ? `WALLET pense : ${suggested.emoji ?? ''} ${suggested.label}. C'est bien ça ?`
+        : 'WALLET ne sait pas encore où ranger ce marchand.'),
+    h('div', { style: { display: 'flex', gap: '10px', marginTop: '12px' } },
+      suggested ? h('button.btn.btn--sm.btn--primary', {
+        type: 'button', 'data-sound': 'success', style: { flex: '1' },
+        onclick: (event) => applyAll(suggested, event.currentTarget),
+      }, 'Oui, pour tout') : null,
+      h('button.btn.btn--sm.btn--secondary', {
+        type: 'button', 'data-sound': 'sheetOpen', style: { flex: '1' },
+        onclick: () => chooseCategory(categories, first.category_id, (category) => applyAll(category)),
+      }, suggested ? 'Autre catégorie' : 'Choisir'),
+    ),
+    h('button.btn.btn--ghost.btn--sm', {
+      type: 'button', style: { marginTop: '6px', width: '100%' },
+      onclick: (event) => {
+        details.hidden = !details.hidden;
+        event.currentTarget.textContent = details.hidden ? 'Voir le détail' : 'Masquer le détail';
+      },
+    }, 'Voir le détail'),
+    details,
+  );
+}
+
+/** Feuille de choix de catégorie, indépendante d'une transaction précise. */
+function chooseCategory(categories, currentId, onPick) {
+  openSheet({
+    title: 'Choisir une catégorie',
+    build: ({ close }) => h('div',
+      [
+        ['Dépenses', categories.filter((c) => c.kind === 'expense')],
+        ['Revenus', categories.filter((c) => c.kind === 'income')],
+        ['Investissement', categories.filter((c) => c.kind === 'investment')],
+        ['Transferts', categories.filter((c) => c.kind === 'transfer')],
+      ].filter(([, list]) => list.length).map(([title, list]) => h('div', { style: { marginTop: '16px' } },
+        h('div.muted-2', { style: { fontSize: 'var(--fs-xs)', fontWeight: '600',
+          textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' } }, title),
+        h('div.rows', list.map((category) => h('button.row', {
+          type: 'button', 'data-sound': 'success',
+          onclick: () => { close(); onPick(category); },
+        },
+          h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } }, category.emoji),
+          h('div.row__main', h('div.row__title', category.label)),
+          h('div.row__end',
+            category.id === currentId ? h('span', { style: { color: 'var(--accent)' } }, glyph('check')) : null),
+        ))),
+      )),
+    ),
+  });
 }
 
 /* ================================================================== */

@@ -49,6 +49,11 @@ export async function homeScreen() {
   mount(hero, loadingBlock(190));
   renderHero(hero);
 
+  /* — Assistant : une barre visible plutôt qu'une icône qu'on ne remarque pas */
+  screen.append(h('button.ask-bar', {
+    type: 'button', 'data-sound': 'sheetOpen', onclick: () => openAssistant(),
+  }, glyph('chat', 18), h('span', 'Pose une question à ton patrimoine…')));
+
   /* — 2. Le mois en cours ————————————————————————— */
   screen.append(section('Ce mois-ci', {
     action: seeAll('Détail', () => navigate('/banque')),
