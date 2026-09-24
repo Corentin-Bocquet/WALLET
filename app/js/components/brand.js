@@ -65,9 +65,12 @@ export function brandLogo(provider, size = 28) {
 
 /** Pastille d'un actif : le vrai logo, avec le sigle en repli. */
 export function assetAvatar(asset, size = 40) {
-  const symbol = String(asset?.symbol ?? '?').slice(0, 4);
+  const symbol = String(asset?.symbol ?? '?').slice(0, 5);
+  // Le sigle entier tient dans la pastille : on réduit la taille plutôt que
+  // de couper « MATIC » en « MATI ».
+  const fontSize = symbol.length >= 5 ? '10px' : symbol.length === 4 ? '11.5px' : '13px';
   const fallback = h('span', {
-    style: { fontWeight: '700', fontSize: '13px', letterSpacing: '-.02em' },
+    style: { fontWeight: '700', fontSize, letterSpacing: '-.03em' },
   }, symbol);
 
   const holder = h('div.avatar', {

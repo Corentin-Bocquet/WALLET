@@ -25,7 +25,14 @@ export function h(selector, props, ...children) {
   for (const [key, value] of Object.entries(props || {})) {
     if (value === null || value === undefined || value === false) continue;
     if (key === 'class') el.className += (el.className ? ' ' : '') + value;
-    else if (key === 'style' && typeof value === 'object') Object.assign(el.style, value);
+    else if (key === 'style' && typeof value === 'object') {
+      // Object.assign ignore les variables CSS (« --badge ») : il faut
+      // setProperty pour elles, sinon la couleur n'arrive jamais au CSS.
+      for (const [prop, v] of Object.entries(value)) {
+        if (prop.startsWith('--')) el.style.setProperty(prop, v);
+        else el.style[prop] = v;
+      }
+    }
     else if (key === 'dataset') Object.assign(el.dataset, value);
     else if (key === 'html') el.innerHTML = value;
     else if (key.startsWith('on') && typeof value === 'function') {

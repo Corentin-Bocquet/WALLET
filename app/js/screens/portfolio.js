@@ -13,7 +13,7 @@ import {
   loadingBlock, emptyState, asyncBlock, errorState, badge, seeAll,
 } from '../components/ui.js';
 import { explainChip } from '../components/explain.js';
-import { areaChart, donutChart, barList } from '../components/chart.js';
+import { areaChart, donutWithLegend, barList } from '../components/chart.js';
 import { money, pct, num, day as fmtDay, trendClass, UNKNOWN } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import { analyseBehaviour } from '../engine/behaviour.js';
@@ -193,27 +193,54 @@ async function renderSplit(host) {
       return;
     }
 
-    const total = buckets.reduce((a, b) => a + b.value, 0);
-    mount(host,
-      donutChart(buckets, { centerLabel: 'Patrimoine' }),
-      h('div.rows', { style: { marginTop: '16px' } },
-        buckets.map((b) => h('div.row',
-          h('div.avatar.avatar--dot', { style: { background: b.color } }),
-          h('div.row__main', h('div.row__title', b.label)),
-          h('div.row__end',
-            h('div.row__value.sensitive', money(b.value, { decimals: 0 })),
-            h('div.row__sub', `${Math.round((b.value / total) * 100)} %`),
-          ),
-        ))),
-    );
+    mount(host, h('div.glass', { style: { padding: '18px' } },
+      donutWithLegend(buckets, { centerLabel: 'Patrimoine', showValue: true })));
   } catch (error) {
     mount(host, errorState(error, { what: 'la répartition' }));
   }
 }
 
+/** Une ligne de position : toujours avec le ou les comptes qui la détiennent. */
+function positionRow(line) {
+  return h('button.row', {
+    type: 'button', 'data-sound': 'sheetOpen',
+    onclick: () => openMergedHolding(line),
+  },
+    assetAvatar(line.asset ?? { symbol: line.symbol }),
+    h('div.row__main',
+      h('div.row__title', line.name),
+      h('div.row__sub', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
+        h('span', `${num(line.quantity)} ${line.symbol}`),
+        // Une pastille même pour un seul compte : on sait d'un coup d'œil où
+        // se trouve chaque position.
+        h('span.acct-badges',
+          line.parts.map((p) => accountBadge(
+            p.account?.label ?? p.account_label ?? 'Manuel',
+            p.account?.provider ?? p.provider))),
+      ),
+    ),
+    h('div.row__end',
+      h('div.row__value.sensitive', line.valueKnown ? money(line.value) : UNKNOWN),
+      line.parts.length > 1
+        ? h('div.row__sub.muted-2', `${line.parts.length} comptes`)
+        : (Number.isFinite(line.parts[0]?.pnl_pct)
+            ? h('div.row__sub', { class: trendClass(line.parts[0].pnl_pct) }, pct(line.parts[0].pnl_pct))
+            : h('div.row__sub.unknown', 'prix de revient inconnu')),
+    ),
+  );
+}
+
 async function renderPositions(host) {
   try {
-    const holdings = await repo.getHoldings();
+    const [rawHoldings, accountList] = await Promise.all([
+      repo.getHoldings(), repo.getAccounts().catch(() => []),
+    ]);
+    // Chaque position porte son compte (nom et plateforme) : c'est ce qui
+    // alimente les pastilles et les filtres, quelle que soit la source.
+    const accountById = new Map(accountList.map((a) => [a.id, a]));
+    const holdings = rawHoldings.map((hold) => (hold.account?.label
+      ? hold
+      : { ...hold, account: accountById.get(hold.account_id) ?? hold.account }));
     if (!holdings.length) {
       mount(host, emptyState({
         emoji: glyph('inbox'),
@@ -224,57 +251,92 @@ async function renderPositions(host) {
       return;
     }
 
-    // Une même crypto détenue sur deux plateformes est UNE ligne, avec les
-    // comptes en pastilles. Deux lignes « SOL » l'une sous l'autre obligeaient
-    // à faire l'addition de tête, ce qui est exactement le travail que
-    // l'application est censée faire.
-    const merged = new Map();
-    for (const holding of holdings) {
-      if (!Number(holding.quantity)) continue;
-      const key = holding.symbol || holding.asset_id;
-      const entry = merged.get(key) ?? {
-        symbol: holding.symbol,
-        name: holding.name || holding.symbol,
-        asset: holding.asset ?? { symbol: holding.symbol, image_url: holding.image_url },
-        quantity: 0,
-        value: 0,
-        valueKnown: false,
-        parts: [],
-      };
-      entry.quantity += Number(holding.quantity) || 0;
-      if (Number.isFinite(holding.value)) { entry.value += holding.value; entry.valueKnown = true; }
-      entry.parts.push(holding);
-      merged.set(key, entry);
+    // Filtres : par compte (Kraken, OKX, saisie manuelle…) et par nature.
+    // Le filtre s'applique AVANT la fusion, pour qu'une ligne « SOL » filtrée
+    // sur Kraken ne montre que la quantité détenue sur Kraken.
+    const accountKey = (p) => p.account?.id ?? p.account_id ?? 'manuel';
+    const accountLabel = (p) => p.account?.label ?? p.account_label ?? 'Saisie manuelle';
+    const accounts = new Map();
+    for (const hold of holdings) {
+      if (Number(hold.quantity)) accounts.set(accountKey(hold), { label: accountLabel(hold), provider: hold.account?.provider ?? hold.provider });
     }
+    const FILTERS = [
+      { key: 'all', label: 'Tout', test: () => true },
+      ...[...accounts.entries()].map(([key, a]) => ({ key, label: a.label, test: (p) => accountKey(p) === key })),
+      { key: 'crypto', label: 'Crypto', test: (p) => !repo.isStablecoin(p.symbol) },
+      { key: 'stable', label: 'Stablecoins', test: (p) => repo.isStablecoin(p.symbol) },
+    ].filter((f) => f.key === 'all' || f.key === 'crypto'
+      || (f.key === 'stable' ? holdings.some((p) => repo.isStablecoin(p.symbol) && Number(p.quantity)) : accounts.size > 1));
 
-    const lines = [...merged.values()].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+    let active = 'all';
+    const chips = h('div.tabs.chip-row', { role: 'tablist', 'aria-label': 'Filtrer les positions' });
+    const list = h('div');
 
-    mount(host, h('div.rows', lines.map((line) => h('button.row', {
-      type: 'button', 'data-sound': 'sheetOpen',
-      onclick: () => openMergedHolding(line),
-    },
-      assetAvatar(line.asset ?? { symbol: line.symbol }),
-      h('div.row__main',
-        h('div.row__title', line.name),
-        h('div.row__sub', { style: { display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' } },
-          h('span', `${num(line.quantity)} ${line.symbol}`),
-          line.parts.length > 1
-            ? h('span.acct-badges',
-                line.parts.map((p) => accountBadge(
-                  p.account?.label ?? p.account_label ?? 'Compte',
-                  p.account?.provider ?? p.provider)))
-            : null,
-        ),
-      ),
-      h('div.row__end',
-        h('div.row__value.sensitive', line.valueKnown ? money(line.value) : UNKNOWN),
-        line.parts.length > 1
-          ? h('div.row__sub.muted-2', `${line.parts.length} comptes`)
-          : (Number.isFinite(line.parts[0]?.pnl_pct)
-              ? h('div.row__sub', { class: trendClass(line.parts[0].pnl_pct) }, pct(line.parts[0].pnl_pct))
-              : h('div.row__sub.unknown', 'prix de revient inconnu')),
-      ),
-    ))));
+    const paintChips = () => mount(chips, FILTERS.map((f) => h('button', {
+      type: 'button', role: 'tab', 'aria-selected': String(f.key === active), 'data-sound': 'select',
+      onclick: () => { active = f.key; paintChips(); paintList(); },
+    }, f.label)));
+
+    const paintList = () => {
+      const test = FILTERS.find((f) => f.key === active)?.test ?? (() => true);
+
+      // Une même crypto détenue sur deux plateformes est UNE ligne, avec les
+      // comptes en pastilles : faire l'addition de tête est justement le
+      // travail que l'application doit faire.
+      const merged = new Map();
+      for (const holding of holdings) {
+        if (!Number(holding.quantity) || !test(holding)) continue;
+        const key = holding.symbol || holding.asset_id;
+        const entry = merged.get(key) ?? {
+          symbol: holding.symbol,
+          name: holding.name || holding.symbol,
+          asset: holding.asset ?? { symbol: holding.symbol, image_url: holding.image_url },
+          quantity: 0, value: 0, valueKnown: false, parts: [],
+        };
+        entry.quantity += Number(holding.quantity) || 0;
+        if (Number.isFinite(holding.value)) { entry.value += holding.value; entry.valueKnown = true; }
+        entry.parts.push(holding);
+        merged.set(key, entry);
+      }
+
+      const lines = [...merged.values()].sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+      // Les poussières (moins d'un euro, souvent des restes de conversion)
+      // encombraient la liste : elles sont rangées dans un groupe repliable.
+      const main = lines.filter((l) => !l.valueKnown || l.value >= 1);
+      const dust = lines.filter((l) => l.valueKnown && l.value < 1);
+
+      if (!lines.length) {
+        mount(list, h('p.muted', { style: { padding: '12px 0' } }, 'Aucune position pour ce filtre.'));
+        return;
+      }
+
+      const dustBody = h('div.rows', { hidden: true }, dust.map(positionRow));
+      mount(list,
+        h('div.rows', main.map(positionRow)),
+        dust.length ? h('div.glass.dust', { style: { marginTop: '12px' } },
+          h('button.row', {
+            type: 'button', 'data-sound': 'select', 'aria-expanded': 'false',
+            onclick: (event) => {
+              dustBody.hidden = !dustBody.hidden;
+              event.currentTarget.setAttribute('aria-expanded', String(!dustBody.hidden));
+            },
+          },
+            h('div.avatar', { style: { background: 'var(--surface-2)' } }, glyph('box')),
+            h('div.row__main',
+              h('div.row__title', 'Petites positions'),
+              h('div.row__sub', `${dust.length} ${dust.length > 1 ? 'actifs' : 'actif'} · moins d’1 € chacun`)),
+            h('div.row__end', { style: { display: 'flex', alignItems: 'center', gap: '8px' } },
+              h('div.row__value.sensitive', money(dust.reduce((sum, l) => sum + l.value, 0))),
+              h('span.chevron', glyph('arrowRight', 16))),
+          ),
+          dustBody,
+        ) : null,
+      );
+    };
+
+    paintChips();
+    paintList();
+    mount(host, FILTERS.length > 2 ? chips : null, list);
   } catch (error) {
     mount(host, errorState(error, { what: 'vos positions' }));
   }

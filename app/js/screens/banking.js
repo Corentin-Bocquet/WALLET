@@ -19,7 +19,7 @@ import {
   errorState, badge, seeAll, switchRow, asyncBlock, currencyToggle,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo } from '../components/explain.js';
-import { bubbleChart, barList } from '../components/chart.js';
+import { donutWithLegend, barList } from '../components/chart.js';
 import { money, pct, day as fmtDay, month as fmtMonth, titleCase, trendClass } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import { BUCKET_LABEL } from '../engine/normalize.js';
@@ -134,16 +134,20 @@ export async function bankingScreen() {
         },
           breakdown.length
             ? h('div',
-                bubbleChart(breakdown.slice(0, 5), {
-                  onSelect: (item) => { categoryFilter = item.category_id; paint(); },
-                }),
-                h('div', { style: { marginTop: '12px' } },
+                h('div.glass', { style: { padding: '18px' } },
+                  donutWithLegend(breakdown, {
+                    centerLabel: 'Dépensé',
+                    onSelect: (item) => { categoryFilter = item.category_id; paint(); },
+                  })),
+                // Le détail par catégorie (avec les budgets) : les cinq
+                // premières visibles, le reste à la demande.
+                collapsible(
                   barList(breakdown, {
                     onSelect: (item) => { categoryFilter = item.category_id; paint(); },
                     budgets: new Map(categories
                       .filter((c) => Number(c.budget_month) > 0)
                       .map((c) => [c.id, Number(c.budget_month)])),
-                  })),
+                  }), 5, 'catégories'),
               )
             : emptyState({ emoji: glyph('receipt'), title: 'Aucune dépense ce mois-ci' }),
         ),
@@ -158,7 +162,7 @@ export async function bankingScreen() {
               }, 'Exporter')
             : null,
         },
-          transactionList(transactions, categories, paint),
+          transactionList(transactions, categories, paint, { limit: 12 }),
         ),
       );
     } catch (error) {
@@ -269,8 +273,29 @@ function toClassifyBanner(transactions) {
 /* Liste de transactions                                               */
 /* ================================================================== */
 
-export function transactionList(transactions, categories, onChange) {
-  const visible = transactions.filter((t) => t.status !== 'hidden');
+/**
+ * Affiche les `limit` premières lignes d'une liste (.rows) et un bouton pour
+ * dérouler le reste : un écran ne doit pas devenir un relevé de 5 pages.
+ */
+function collapsible(list, limit, noun) {
+  const rows = [...list.children];
+  if (rows.length <= limit) return h('div', { style: { marginTop: '12px' } }, list);
+  rows.slice(limit).forEach((row) => { row.hidden = true; });
+  const more = h('button.btn.btn--ghost.btn--sm.show-more', {
+    type: 'button', 'data-sound': 'select',
+    onclick: () => {
+      const expanded = more.dataset.open === '1';
+      rows.slice(limit).forEach((row) => { row.hidden = expanded; });
+      more.dataset.open = expanded ? '' : '1';
+      more.textContent = expanded ? `Voir les ${rows.length - limit} autres ${noun}` : 'Réduire';
+    },
+  }, `Voir les ${rows.length - limit} autres ${noun}`);
+  return h('div', { style: { marginTop: '12px' } }, list, more);
+}
+
+export function transactionList(transactions, categories, onChange, { limit = Infinity } = {}) {
+  const all = transactions.filter((t) => t.status !== 'hidden');
+  const visible = all.slice(0, limit);
 
   if (!visible.length) {
     return emptyState({ emoji: glyph('receipt'), title: 'Aucune transaction', body: 'Rien sur cette période.' });
@@ -282,14 +307,20 @@ export function transactionList(transactions, categories, onChange) {
     byDay.get(tx.booked_at).push(tx);
   }
 
-  return h('div',
-    [...byDay.entries()].map(([date, rows]) => h('div', { style: { marginTop: '20px' } },
-      h('div.muted-2', { style: { fontSize: 'var(--fs-xs)', fontWeight: '600',
-        textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '4px' } },
-        fmtDay(date, { long: true })),
-      h('div.rows', rows.map((tx) => transactionRow(tx, categories, onChange))),
-    )),
-  );
+  const host = h('div');
+  host.append(...[...byDay.entries()].map(([date, rows]) => h('div', { style: { marginTop: '20px' } },
+    h('div.muted-2', { style: { fontSize: 'var(--fs-xs)', fontWeight: '600',
+      textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '4px' } },
+      fmtDay(date, { long: true })),
+    h('div.rows', rows.map((tx) => transactionRow(tx, categories, onChange))),
+  )));
+  if (all.length > visible.length) {
+    host.append(h('button.btn.btn--secondary.btn--sm.show-more', {
+      type: 'button', 'data-sound': 'select',
+      onclick: () => host.replaceWith(transactionList(transactions, categories, onChange)),
+    }, `Voir les ${all.length - visible.length} autres opérations`));
+  }
+  return host;
 }
 
 export function transactionRow(tx, categories, onChange) {

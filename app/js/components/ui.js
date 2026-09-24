@@ -311,13 +311,13 @@ export function accordion(title, buildBody, { open = false } = {}) {
 
 /** Bandeau du mode démonstration : dire clairement ce qui est simulé (§51). */
 export function demoBanner() {
-  return h('div.notice', { style: { marginBottom: '16px' } },
-    h('span', glyph('flask')),
-    h('div',
-      h('strong', 'Mode démonstration'),
-      'Les prix et les transactions affichés sont simulés. Connectez votre serveur Supabase et vos comptes depuis Profil pour voir vos vraies données.',
-    ),
-  );
+  // Une pilule plutôt qu'un pavé de quatre lignes en tête d'écran : le
+  // message reste là, le détail est à un tap (Profil).
+  return h('button.demo-pill', {
+    type: 'button', 'data-sound': 'select',
+    title: 'Les prix et les transactions affichés sont simulés. Connectez votre serveur depuis Profil.',
+    onclick: () => navigate('/profil'),
+  }, glyph('flask'), h('strong', 'Démonstration'), h('span', '· données simulées'));
 }
 
 export { money, pct, UNKNOWN };

@@ -54,7 +54,12 @@ export async function homeScreen() {
     type: 'button', 'data-sound': 'sheetOpen', onclick: () => openAssistant(),
   }, glyph('chat', 18), h('span', 'Pose une question à ton patrimoine…')));
 
-  /* — 2. Le mois en cours ————————————————————————— */
+  /* — 2. Objectifs : juste sous le patrimoine, là où l'œil arrive ———— */
+  const goals = h('div');
+  screen.append(goals);
+  renderGoals(goals);
+
+  /* — 3. Le mois en cours ————————————————————————— */
   screen.append(section('Ce mois-ci', {
     action: seeAll('Détail', () => navigate('/banque')),
   }, asyncBlock(loadMonth(), {
@@ -63,12 +68,13 @@ export async function homeScreen() {
     what: 'votre mois',
   })));
 
-  /* — 3. Où part l'argent ————————————————————————— */
+  /* — 4. Où part l'argent ————————————————————————— */
   screen.append(section('Où part l’argent', {
     action: seeAll('Tout voir', () => navigate('/banque')),
   }, asyncBlock(repo.categoryBreakdown(), {
     loading: () => loadingRows(4),
-    render: (rows) => barList(rows.slice(0, 5), {
+    // Les trois premiers postes suffisent ici ; le détail vit dans Budget.
+    render: (rows) => barList(rows.slice(0, 3), {
       onSelect: (item) => navigate(`/banque?categorie=${item.category_id ?? ''}`),
     }),
     empty: () => emptyState({
@@ -78,11 +84,6 @@ export async function homeScreen() {
     }),
     what: 'la répartition',
   })));
-
-  /* — 4. Objectifs : visibles ici, pas seulement au fond du profil ———— */
-  const goals = h('div');
-  screen.append(goals);
-  renderGoals(goals);
 
   /* — 5. Ce que WALLET a remarqué ————————————————— */
   const insights = h('div');
