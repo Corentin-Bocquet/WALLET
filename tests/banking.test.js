@@ -282,3 +282,32 @@ test('le drawdown mesure bien la chute depuis le sommet', () => {
   assert.equal(Math.round(dd.current * 100), -33);
   assert.equal(dd.peak, 120);
 });
+
+test('les prélèvements à venir avancent une échéance passée et ignorent les résiliés', async () => {
+  const { upcomingCharges } = await import('../app/js/engine/recurring.js');
+  const now = Date.UTC(2026, 8, 24);
+  const iso = (d) => new Date(d).toISOString().slice(0, 10);
+  const charges = upcomingCharges([
+    // Échéance passée de 4 jours : avancée d'un mois, vers le 20 octobre.
+    { label: 'Loyer', cadence: 'monthly', is_active: true, direction: 'debit',
+      average_amount: -680, next_expected: iso(now - 4 * DAY) },
+    // Hebdomadaire : plusieurs passages sur la fenêtre.
+    { label: 'Panier', cadence: 'weekly', is_active: true, direction: 'debit',
+      average_amount: -20, next_expected: iso(now + 2 * DAY) },
+    // Manqué depuis trois mois : considéré résilié.
+    { label: 'Vieux', cadence: 'monthly', is_active: true, direction: 'debit',
+      average_amount: -9, next_expected: iso(now - 95 * DAY) },
+    // Une entrée d'argent n'est pas un prélèvement.
+    { label: 'Salaire', cadence: 'monthly', is_active: true, direction: 'credit',
+      average_amount: 2500, next_expected: iso(now + 3 * DAY) },
+  ], { days: 30, now });
+
+  const labels = charges.map((c) => c.recurring.label);
+  assert.equal(labels.filter((l) => l === 'Panier').length, 5);
+  assert.ok(labels.includes('Loyer'));
+  assert.ok(!labels.includes('Vieux'));
+  assert.ok(!labels.includes('Salaire'));
+  assert.equal(charges.find((c) => c.recurring.label === 'Loyer').amount, 680);
+  // Trié par date.
+  assert.deepEqual([...charges].sort((a, b) => a.date.localeCompare(b.date)), charges);
+});

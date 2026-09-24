@@ -24,7 +24,7 @@ import { money, pct, day as fmtDay, month as fmtMonth, titleCase, trendClass } f
 import * as repo from '../data/repo.js';
 import { BUCKET_LABEL } from '../engine/normalize.js';
 import { selectSimilarTransactions } from '../engine/categorizer.js';
-import { CADENCE_LABEL, monthlyRecurringCost } from '../engine/recurring.js';
+import { CADENCE_LABEL, monthlyRecurringCost, upcomingCharges } from '../engine/recurring.js';
 
 /* ================================================================== */
 /* Écran principal                                                     */
@@ -118,9 +118,12 @@ export async function bankingScreen() {
         from, to, categoryId: categoryFilter, status: 'all', limit: 500,
       });
 
+      const recurring = monthOffset === 0 ? await repo.listRecurring().catch(() => []) : [];
+
       mount(body,
         summaryCard(summary),
         toClassifyBanner(transactions),
+        monthOffset === 0 ? weekAheadCard(recurring) : null,
 
         section('Répartition', {
           action: categoryFilter
@@ -212,7 +215,7 @@ function toClassifyBanner(transactions) {
       h('span.lead-icon', glyph('question')),
       h('div',
         h('div', { style: { fontWeight: '600' } },
-          `${pending.length} ${pending.length > 1 ? 'transactions' : 'transaction'} à classer ce mois-ci`),
+          `${pending.length} à classer ce mois-ci`),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
           'WALLET hésite. Dites-lui une fois, il retiendra.'),
       ),
@@ -770,15 +773,16 @@ export async function recurringScreen() {
 
     mount(body,
       h('div.card',
-        h('div.eyebrow', 'Coût mensuel de vos abonnements'),
+        h('div.eyebrow', 'Sorties régulières, par mois'),
         h('div.display.num.sensitive', { style: { fontSize: '32px', marginTop: '4px' } },
           money(monthly, { decimals: 0 })),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
-          `soit ${money(monthly * 12, { decimals: 0 })} par an · ${debits.filter((r) => r.is_active).length} actifs`),
+          `soit ${money(monthly * 12, { decimals: 0 })} par an · ${debits.filter((r) => r.is_active).length} actives`),
         h('p.explain__source', { style: { marginTop: '12px' } },
-          'Les cadences non mensuelles sont ramenées à une base mensuelle pour permettre la comparaison.'),
+          'Abonnements, loyer, mais aussi courses hebdomadaires, virements d’épargne et achats programmés : tout ce qui revient à rythme régulier. Les cadences non mensuelles sont ramenées au mois.'),
       ),
 
+      upcomingSection(recurring),
       debits.length ? section('Sorties régulières', {}, recurringList(debits)) : null,
       credits.length ? section('Entrées régulières', {}, recurringList(credits)) : null,
     );
@@ -787,6 +791,61 @@ export async function recurringScreen() {
   }
 
   return screen;
+}
+
+/** Ce qui va sortir du compte dans les 30 prochains jours, date par date. */
+function upcomingSection(recurring) {
+  const charges = upcomingCharges(recurring, { days: 30 });
+  if (!charges.length) return null;
+  const total = charges.reduce((sum, c) => sum + c.amount, 0);
+  return section('À venir sur 30 jours', {},
+    h('p.muted', { style: { fontSize: 'var(--fs-sm)', marginBottom: '8px' } },
+      `${charges.length} ${charges.length > 1 ? 'prélèvements attendus' : 'prélèvement attendu'} · `,
+      h('span.num.sensitive', money(total, { decimals: 0 }))),
+    h('div.rows', charges.map((c) => h('div.row',
+      h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '12px', fontWeight: '700', lineHeight: '1.1', textAlign: 'center' } },
+        dayBadge(c.date)),
+      h('div.row__main',
+        h('div.row__title', titleCase(c.recurring.merchant || c.recurring.label) || c.recurring.label),
+        h('div.row__sub', CADENCE_LABEL[c.recurring.cadence] ?? '')),
+      h('div.row__end', h('div.row__value.num.sensitive', money(-c.amount, { decimals: 2 }))),
+    ))),
+    h('p.explain__source', { style: { marginTop: '12px' } },
+      'Dates estimées à partir du rythme habituel de chaque prélèvement ; le jour exact peut varier de quelques jours.'),
+  );
+}
+
+function dayBadge(isoDate) {
+  const d = new Date(`${isoDate}T12:00:00`);
+  return h('div',
+    h('div', { style: { fontSize: '15px' } }, String(d.getDate())),
+    h('div.muted', { style: { fontSize: '10px', textTransform: 'uppercase' } },
+      d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')));
+}
+
+/** Encart du Budget : les prélèvements des 7 prochains jours, d'un coup d'œil. */
+function weekAheadCard(recurring) {
+  const charges = upcomingCharges(recurring, { days: 7 });
+  if (!charges.length) return h('div');
+  const total = charges.reduce((sum, c) => sum + c.amount, 0);
+  const names = charges.slice(0, 3)
+    .map((c) => titleCase(c.recurring.merchant || c.recurring.label) || c.recurring.label).join(', ');
+  return h('button.card.card--tap', {
+    type: 'button', 'data-sound': 'select',
+    style: { marginTop: '16px', width: '100%', textAlign: 'left' },
+    onclick: () => navigate('/banque/recurrent'),
+  },
+    h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
+      h('span.lead-icon', { style: { color: 'var(--info)' } }, glyph('clock')),
+      h('div', { style: { flex: '1', minWidth: '0' } },
+        h('div', { style: { fontWeight: '600' } },
+          `Cette semaine : `, h('span.num.sensitive', money(total, { decimals: 0 })),
+          ` en ${charges.length} ${charges.length > 1 ? 'prélèvements' : 'prélèvement'}`),
+        h('div.muted', { style: { fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+          names + (charges.length > 3 ? '…' : ''))),
+      h('span', { style: { color: 'var(--text-3)' } }, '›'),
+    ),
+  );
 }
 
 function recurringList(items) {

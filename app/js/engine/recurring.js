@@ -224,3 +224,44 @@ export function monthlyRecurringCost(recurrings) {
     .filter((r) => r.is_active && r.direction === 'debit')
     .reduce((total, r) => total + r.average_amount * (perMonth[r.cadence] ?? 0), 0);
 }
+
+/**
+ * Prélèvements attendus dans les `days` prochains jours.
+ *
+ * `next_expected` est calculé au moment de la détection ; s'il est déjà
+ * passé (la détection date un peu), on avance d'une période à la fois
+ * jusqu'à retomber dans le futur. Un prélèvement hebdomadaire peut donc
+ * apparaître plusieurs fois sur 30 jours, ce qui est exactement ce qui
+ * sortira du compte.
+ *
+ * @returns {Array<{recurring:object, date:string, amount:number}>} triés par date
+ */
+export function upcomingCharges(recurrings, { days = 30, now = Date.now() } = {}) {
+  const start = new Date(now);
+  const today = Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate());
+  const horizon = today + days * DAY;
+  const out = [];
+
+  for (const r of recurrings || []) {
+    if (!r.is_active || r.direction === 'credit' || !r.next_expected) continue;
+    const cadence = CADENCES.find((c) => c.code === r.cadence);
+    if (!cadence) continue;
+
+    let at = Date.parse(r.next_expected);
+    if (!Number.isFinite(at)) continue;
+    // Une échéance manquée de plus de deux périodes n'est plus « à venir » :
+    // l'abonnement a probablement été résilié entre-temps.
+    if (today - at > 2 * cadence.days * DAY) continue;
+    while (at < today) at += cadence.days * DAY;
+
+    for (; at <= horizon; at += cadence.days * DAY) {
+      out.push({
+        recurring: r,
+        date: new Date(at).toISOString().slice(0, 10),
+        amount: Math.abs(Number(r.average_amount) || 0),
+      });
+    }
+  }
+
+  return out.sort((a, b) => a.date.localeCompare(b.date) || b.amount - a.amount);
+}

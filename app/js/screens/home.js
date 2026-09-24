@@ -414,25 +414,24 @@ async function renderInsights(host) {
 
   const activeSubs = recurring.filter((r) => r.is_active && r.direction === 'debit');
   if (activeSubs.length) {
-    const monthlyCost = activeSubs.reduce((total, r) => {
-      const perMonth = { weekly: 30.44 / 7, biweekly: 30.44 / 14, monthly: 1,
-        bimonthly: 0.5, quarterly: 1 / 3, yearly: 1 / 12 }[r.cadence] ?? 0;
-      return total + Number(r.average_amount) * perMonth;
-    }, 0);
+    // Même calcul que l'écran Récurrents : deux formules recopiées finissent
+    // toujours par afficher deux montants différents.
+    const { monthlyRecurringCost } = await import('../engine/recurring.js');
+    const monthlyCost = monthlyRecurringCost(activeSubs);
 
     cards.push(h('button.card.card--tap', {
       type: 'button', 'data-sound': 'select',
       style: { textAlign: 'left', width: '100%' },
       onclick: () => navigate('/banque/recurrent'),
     },
-      h('div.eyebrow', glyph('refresh', 16), ' Paiements récurrents'),
+      h('div.eyebrow', glyph('refresh', 16), ' Sorties régulières'),
       h('div', { style: { marginTop: '6px' } },
         h('span.num.sensitive', { style: { fontSize: '22px', fontWeight: '700' } },
           money(monthlyCost, { decimals: 0 })),
         h('span.muted', ' par mois'),
       ),
       h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } },
-        `${activeSubs.length} prélèvements réguliers détectés`),
+        `${activeSubs.length} ${activeSubs.length > 1 ? 'sorties régulières détectées' : 'sortie régulière détectée'} · voir ce qui arrive`),
     ));
   }
 
