@@ -183,6 +183,16 @@ export const getInvestmentTrades = () =>
  * Un compte dont le solde est inconnu n'est pas compté comme 0 : il met le
  * total en « partiel » et l'écran l'annonce (§46).
  */
+/**
+ * Stablecoins : des jetons adossés à une monnaie. Ils se détiennent sur un
+ * exchange comme une crypto, mais valent un dollar ou un euro : dans la
+ * répartition du patrimoine, ce sont des LIQUIDITÉS, pas de l'exposition crypto.
+ */
+export const STABLECOINS = new Set([
+  'USDT', 'USDC', 'DAI', 'TUSD', 'USDG', 'PYUSD', 'FDUSD', 'USDE', 'EURC', 'EURT', 'EUROC', 'EURI',
+]);
+export const isStablecoin = (symbol) => STABLECOINS.has(String(symbol ?? '').toUpperCase());
+
 export async function getNetWorth() {
   const [accounts, holdings] = await Promise.all([getAccounts(), getHoldings()]);
 
@@ -232,6 +242,7 @@ export async function getNetWorth() {
       }
     }
     if (holding.asset?.kind === 'stock' || holding.asset?.kind === 'etf') equity += holding.value;
+    else if (isStablecoin(holding.symbol ?? holding.asset?.symbol)) cash += holding.value;
     else crypto += holding.value;
   }
 

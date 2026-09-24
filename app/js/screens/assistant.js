@@ -85,27 +85,46 @@ function buildPanel(close, initialQuestion) {
     }
 
     // Le moteur local couvre les questions cadrées. Pour tout le reste, on
-    // passe la main à l'IA plutôt que de répondre « je ne sais pas ».
-    if (!result?.intent && !repo.isDemoMode()) {
-      pending.replaceWith(h('div.card', h('span.muted', 'Je réfléchis…')));
-      const thinking = thread.lastElementChild;
-      try {
-        const remote = await repo.askAssistant(question);
+    // passe la main à l'IA. Et si l'IA ne répond pas (pas de serveur, clé
+    // absente, quota, réseau), on ne laisse JAMAIS une erreur sèche : on
+    // répond avec le bilan chiffré calculé ici, et on dit pourquoi.
+    if (!result?.intent) {
+      const thinking = h('div.card', h('span.muted', 'Je réfléchis…'));
+      pending.replaceWith(thinking);
+      let remoteError = null;
+      if (!repo.isDemoMode()) {
+        try {
+          const remote = await repo.askAssistant(question);
+          if (remote?.answer) {
+            result = {
+              intent: 'llm',
+              text: remote.answer,
+              evidence: remote.evidence ?? [],
+              caveat: 'Réponse rédigée par une IA à partir de vos totaux. Vérifiez ce qui compte.',
+              action: null,
+            };
+          }
+        } catch (error) {
+          remoteError = error;
+        }
+      }
+      if (!result?.intent) {
+        result = await answerOverview().catch(() => result);
         result = {
-          intent: 'llm',
-          text: remote?.answer || result.text,
-          evidence: remote?.evidence ?? [],
-          caveat: 'Réponse rédigée par une IA à partir de vos totaux. Vérifiez ce qui compte.',
-          action: null,
+          ...result,
+          text: `${repo.isDemoMode()
+            ? "En démonstration, l'IA en ligne n'est pas branchée."
+            : "L'IA en ligne n'a pas pu répondre à cette question."} Voici ce que je peux vous dire à partir de vos chiffres. ${result.text}`,
+          caveat: remoteError ? `Raison : ${remoteError.message}` : result.caveat,
+          action: { kind: 'suggestions', items: SUGGESTIONS },
         };
-      } catch (error) {
-        result = { ...result, caveat: error.message };
       }
       thinking.replaceWith(renderAnswer(result, { close, ask }));
     } else {
       pending.replaceWith(renderAnswer(result, { close, ask }));
     }
-    repo.logAssistant?.({ role: 'user', content: question, intent: result.intent, engine: 'local' })
+    // Journal facultatif : son absence ou son échec ne doit rien casser.
+    Promise.resolve(repo.logAssistant?.({ role: 'user', content: question, intent: result.intent, engine: 'local' }))
       .catch(() => {});
   }
 
@@ -198,6 +217,10 @@ export async function resolve(question) {
     case 'scenario':         return answerScenario(question, holdings);
     case 'risk':             return answerRisk(holdings);
     case 'score':            return answerScore(symbol || 'BTC');
+    case 'overview':         return answerOverview();
+    case 'holdings_list':    return answerHoldingsList(holdings);
+    case 'cash':             return answerCash();
+    case 'goals':            return answerGoals(holdings);
     default:                 return unknownAnswer(question);
   }
 }
@@ -457,7 +480,111 @@ async function answerScenario(question, holdings) {
   });
 }
 
-async function answerRisk(holdings) {
+/** Positions fusionnées par actif : SOL sur Kraken et sur OKX = une ligne. */
+function mergeHoldings(holdings) {
+  const bySymbol = new Map();
+  for (const hold of holdings) {
+    if (!Number(hold.quantity)) continue;
+    const key = hold.symbol || hold.asset_id;
+    const entry = bySymbol.get(key) ?? { ...hold, quantity: 0, value: 0, valueKnown: false };
+    entry.quantity += Number(hold.quantity) || 0;
+    if (Number.isFinite(hold.value)) { entry.value += hold.value; entry.valueKnown = true; }
+    bySymbol.set(key, entry);
+  }
+  return [...bySymbol.values()]
+    .map((e) => ({ ...e, value: e.valueKnown ? e.value : null }))
+    .sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+}
+
+async function answerOverview() {
+  const [nw, month, goals] = await Promise.all([
+    repo.getNetWorth(),
+    repo.monthlySummary().catch(() => null),
+    repo.listGoals().catch(() => []),
+  ]);
+  const breakdown = await repo.categoryBreakdown().catch(() => []);
+  const top = breakdown[0];
+  const evidence = [
+    { label: 'Patrimoine', value: money(nw.total, { decimals: 0 }) },
+    { label: 'Crypto', value: money(nw.crypto, { decimals: 0 }) },
+    { label: 'Liquidités', value: money(nw.cash, { decimals: 0 }) },
+  ];
+  if (Number.isFinite(nw.change_30d)) {
+    evidence.push({ label: 'Sur 30 jours', value: `${money(nw.change_30d, { sign: true, decimals: 0 })} (${pct(nw.change_30d_pct)})` });
+  }
+  if (month && Number(month.expense) > 0) {
+    evidence.push({ label: 'Dépenses du mois', value: money(Number(month.expense), { decimals: 0 }) });
+  }
+  if (top) evidence.push({ label: 'Premier poste du mois', value: `${top.label} · ${money(Math.abs(top.value ?? top.total), { decimals: 0 })}` });
+  if (goals.length) evidence.push({ label: 'Objectifs en cours', value: String(goals.length) });
+
+  const trend = Number.isFinite(nw.change_30d)
+    ? (nw.change_30d >= 0 ? ` Il a progressé de ${money(nw.change_30d, { decimals: 0 })} en 30 jours.`
+      : ` Il a reculé de ${money(-nw.change_30d, { decimals: 0 })} en 30 jours.`)
+    : '';
+  return answer({
+    intent: 'overview',
+    text: `Votre patrimoine est de ${money(nw.total, { decimals: 0 })}.${trend}`,
+    evidence,
+    caveat: nw.is_partial ? 'Total partiel : certaines sources n’ont pas pu être valorisées.' : null,
+    action: { kind: 'navigate', path: '/', label: 'Voir l’accueil' },
+  });
+}
+
+async function answerHoldingsList(holdings) {
+  const merged = mergeHoldings(holdings);
+  if (!merged.length) {
+    return answer({ intent: 'holdings_list', text: 'Vous n’avez aucune position enregistrée pour l’instant.',
+      action: { kind: 'navigate', path: '/profil/comptes', label: 'Connecter un exchange' } });
+  }
+  const shown = merged.filter((m) => (m.value ?? 0) >= 1).slice(0, 8);
+  const small = merged.length - shown.length;
+  return answer({
+    intent: 'holdings_list',
+    text: `Vous détenez ${merged.length} ${merged.length > 1 ? 'actifs' : 'actif'}. Les principaux :`,
+    evidence: shown.map((m) => ({ label: `${m.symbol} · ${num(m.quantity)}`, value: m.value === null ? '—' : money(m.value, { decimals: 0 }) })),
+    caveat: small > 0 ? `${small} petite${small > 1 ? 's' : ''} position${small > 1 ? 's' : ''} de moins d’un euro non listée${small > 1 ? 's' : ''}.` : null,
+    action: { kind: 'navigate', path: '/portefeuille', label: 'Voir toutes mes positions' },
+  });
+}
+
+async function answerCash() {
+  const [nw, accounts] = await Promise.all([repo.getNetWorth(), repo.getAccounts().catch(() => [])]);
+  const withBalance = accounts.filter((a) => a.balance !== null && a.balance !== undefined && Number(a.balance) > 0);
+  return answer({
+    intent: 'cash',
+    text: `Vous avez ${money(nw.cash, { decimals: 0 })} de liquidités, stablecoins (USDT, USDC…) compris.`,
+    evidence: withBalance.map((a) => ({ label: a.label, value: money(Number(a.balance), { decimals: 0 }) })),
+    caveat: 'Les stablecoins valent une monnaie : ils sont comptés en liquidités, pas en crypto.',
+    action: { kind: 'navigate', path: '/portefeuille', label: 'Voir la répartition' },
+  });
+}
+
+async function answerGoals(holdings) {
+  const goals = await repo.listGoals().catch(() => []);
+  if (!goals.length) {
+    return answer({ intent: 'goals', text: 'Vous n’avez pas encore d’objectif.',
+      action: { kind: 'navigate', path: '/profil/objectifs', label: 'Créer un objectif' } });
+  }
+  const [{ currentValue, formatGoal }, netWorth, summary] = await Promise.all([
+    import('./alerts.js'), repo.getNetWorth().catch(() => null), repo.monthlySummary().catch(() => null),
+  ]);
+  const evidence = goals.map((goal) => {
+    const current = currentValue(goal, { netWorth, summary, holdings });
+    const target = Number(goal.target_value);
+    const progress = Number.isFinite(current) && target > 0 ? Math.round((current / target) * 100) : null;
+    return { label: goal.label, value: `${formatGoal(current, goal.kind)} / ${formatGoal(target, goal.kind)}${progress === null ? '' : ` · ${progress} %`}` };
+  });
+  return answer({
+    intent: 'goals',
+    text: `Vous suivez ${goals.length} ${goals.length > 1 ? 'objectifs' : 'objectif'}.`,
+    evidence,
+    action: { kind: 'navigate', path: '/profil/objectifs', label: 'Gérer mes objectifs' },
+  });
+}
+
+async function answerRisk(rawHoldings) {
+  const holdings = mergeHoldings(rawHoldings);
   const nw = await repo.getNetWorth();
   if (!holdings.length || !nw.total) {
     return answer({
@@ -466,7 +593,10 @@ async function answerRisk(holdings) {
     });
   }
 
-  const sorted = holdings.slice().sort((a, b) => (b.value ?? 0) - (a.value ?? 0));
+  const sorted = holdings.filter((hold) => Number.isFinite(hold.value));
+  if (!sorted.length) {
+    return answer({ intent: 'risk', text: "Je n'arrive pas à valoriser vos positions pour analyser une concentration." });
+  }
   const biggest = sorted[0];
   const shareBiggest = (biggest.value / nw.total) * 100;
   const cryptoShare = (nw.crypto / nw.total) * 100;
