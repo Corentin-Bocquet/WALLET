@@ -49,6 +49,11 @@ export async function homeScreen() {
   mount(hero, loadingBlock(190));
   renderHero(hero);
 
+  /* — Assistant : une barre visible plutôt qu'une icône qu'on ne remarque pas */
+  screen.append(h('button.ask-bar', {
+    type: 'button', 'data-sound': 'sheetOpen', onclick: () => openAssistant(),
+  }, glyph('chat', 18), h('span', 'Pose une question à ton patrimoine…')));
+
   /* — 2. Le mois en cours ————————————————————————— */
   screen.append(section('Ce mois-ci', {
     action: seeAll('Détail', () => navigate('/banque')),
@@ -74,7 +79,12 @@ export async function homeScreen() {
     what: 'la répartition',
   })));
 
-  /* — 4. Ce que WALLET a remarqué ————————————————— */
+  /* — 4. Objectifs : visibles ici, pas seulement au fond du profil ———— */
+  const goals = h('div');
+  screen.append(goals);
+  renderGoals(goals);
+
+  /* — 5. Ce que WALLET a remarqué ————————————————— */
   const insights = h('div');
   screen.append(section('Ce que WALLET a remarqué', {}, insights));
   mount(insights, loadingRows(2));
@@ -127,7 +137,7 @@ async function renderHero(host) {
           explain: 'net_worth',
           change,
           changePct,
-          changeLabel: RANGES.find((r) => r.key === days)?.label,
+          changeLabel: `sur ${RANGES.find((r) => r.key === days)?.label}`,
         }),
       ),
 
@@ -160,10 +170,12 @@ async function renderHero(host) {
       ),
 
       // Décomposition : trois tuiles, pas un tableau (§5)
-      h('div.hscroll', { style: { marginTop: '20px' } },
-        splitTile('Crypto', netWorth.crypto, '₿', () => navigate('/portefeuille')),
-        splitTile('Liquidités', netWorth.cash, glyph('cash'), () => navigate('/portefeuille')),
-        netWorth.equity > 0 ? splitTile('Actions', netWorth.equity, glyph('trendUp'), () => navigate('/portefeuille')) : null,
+      // Tuiles sur toute la largeur : deux tuiles de 132 px laissaient un
+      // tiers de l'écran vide à droite.
+      h('div.split-grid', { style: { marginTop: '20px' } },
+        splitTile('Crypto', netWorth.crypto, glyph('coin'), netWorth.total),
+        splitTile('Liquidités', netWorth.cash, glyph('cash'), netWorth.total),
+        netWorth.equity > 0 ? splitTile('Actions', netWorth.equity, glyph('trendUp'), netWorth.total) : null,
       ),
     );
   };
@@ -183,14 +195,15 @@ async function renderHero(host) {
 let swipeFrom = null;
 
 
-function splitTile(label, value, emoji, onClick) {
+function splitTile(label, value, emoji, total) {
+  const share = Number(total) > 0 && Number.isFinite(Number(value))
+    ? Math.round((Number(value) / Number(total)) * 100) : null;
   return h('button.tile.card--tap', {
-    type: 'button', 'data-sound': 'select', onclick: onClick,
-    style: { minWidth: '132px' },
+    type: 'button', 'data-sound': 'select', onclick: () => navigate('/portefeuille'),
   },
-    h('div.tile__label', label),
-    h('div', { style: { fontSize: '22px' } }, emoji),
+    h('div.tile__label', emoji, label),
     h('div.tile__value.sensitive', money(value, { compact: true, decimals: 0 })),
+    share !== null ? h('div.muted-2', { style: { fontSize: 'var(--fs-xs)' } }, `${share} % du total`) : null,
   );
 }
 
@@ -200,23 +213,31 @@ function splitTile(label, value, emoji, onClick) {
 
 async function loadMonth() {
   const now = new Date();
-  const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-    .toISOString().slice(0, 10);
-  const [current, previous, lastKnown] = await Promise.all([
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const previousStart = new Date(Date.UTC(y, m - 1, 1));
+  // Même nombre de jours que le mois en cours, borné à la fin du mois
+  // précédent (le 31 mars se compare au 28 février, pas au 3 mars).
+  const previousEnd = new Date(Date.UTC(y, m - 1,
+    Math.min(now.getUTCDate(), new Date(Date.UTC(y, m, 0)).getUTCDate())));
+
+  const [current, previous, lastKnown, expectedIncome] = await Promise.all([
     repo.monthlySummary(),
-    repo.monthlySummary(previousMonth),
+    repo.summarizeRange(iso(previousStart), iso(previousEnd)).catch(() => null),
     repo.lastTransactionDate?.().catch(() => null) ?? null,
+    repo.expectedMonthlyIncome().catch(() => null),
   ]);
-  return { current, previous, lastKnown };
+  return { current, previous, lastKnown, expectedIncome };
 }
 
-function renderMonth({ current, previous, lastKnown }) {
+function renderMonth({ current, previous, lastKnown, expectedIncome }) {
   if (!current) return emptyState({ emoji: glyph('receipt'), title: 'Aucune donnée bancaire' });
 
   // Un mois sans AUCUNE opération n'est pas un mois à zéro euro : c'est un
   // mois qu'on ne connaît pas. Afficher « 0 € » et « -100 % » donnerait un
   // chiffre faux avec assurance (§46).
-  const operations = Number(current.count ?? current.operations ?? 0);
+  const operations = Number(current.tx_count ?? current.count ?? current.operations ?? 0);
   const hasData = operations > 0 || Number(current.expense) !== 0 || Number(current.income) !== 0;
 
   if (!hasData) {
@@ -243,29 +264,38 @@ function renderMonth({ current, previous, lastKnown }) {
   const rate = current.savings_rate === null ? null : Number(current.savings_rate);
   const previousExpense = previous ? Number(previous.expense) : null;
   const expenseChange = previousExpense ? ((expense / previousExpense) - 1) * 100 : null;
+  // Salaire du mois pas encore importé : plutôt qu'un « — », une estimation
+  // sur le revenu habituel, affichée comme telle (≈ et « estimé »).
+  const estimatedRate = rate === null && Number(expectedIncome) > 0
+    ? ((Number(expectedIncome) + income - expense) / (Number(expectedIncome) + income)) * 100
+    : null;
 
   return h('div.card',
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' } },
       h('div',
-        h('div.eyebrow', '💳 Dépenses'),
+        h('div.eyebrow', glyph('card', 16), ' Dépenses'),
         h('div.num.sensitive', { style: { fontSize: '28px', fontWeight: '700', marginTop: '4px' } },
           money(expense, { decimals: 0 })),
         Number.isFinite(expenseChange)
           ? h('div.num', { class: trendClass(-expenseChange), style: { fontSize: 'var(--fs-sm)', fontWeight: '600' } },
-              `${pct(expenseChange)} vs mois dernier`)
+              `${pct(expenseChange, { decimals: 0 })} vs même période`)
           : h('div.muted-2', { style: { fontSize: 'var(--fs-sm)' } }, 'Pas de mois précédent à comparer'),
       ),
       h('div', { style: { textAlign: 'right' } },
         h('div.eyebrow', { style: { justifyContent: 'flex-end' } },
           'Épargne', explainChip('savings_rate', { label: "taux d'épargne" })),
         h('div.num.sensitive', { style: { fontSize: '28px', fontWeight: '700', marginTop: '4px' } },
-          rate === null
-            ? h('span.unknown', '—')
-            : `${Math.round(rate)} %`),
+          rate !== null
+            ? `${Math.round(rate)} %`
+            : estimatedRate !== null
+              ? h('span', { style: { color: 'var(--text-2)' } }, `≈ ${Math.round(estimatedRate)} %`)
+              : h('span.unknown', '—')),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
-          rate === null
-            ? 'revenus inconnus'
-            : money(Number(current.net_savings), { decimals: 0 })),
+          rate !== null
+            ? money(Number(current.net_savings), { decimals: 0 })
+            : estimatedRate !== null
+              ? `estimé · revenu ≈ ${money(expectedIncome, { decimals: 0 })}`
+              : 'revenus inconnus'),
       ),
     ),
 
@@ -273,7 +303,7 @@ function renderMonth({ current, previous, lastKnown }) {
       style: { marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--hairline)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     },
-      h('span.muted', { style: { fontSize: 'var(--fs-sm)' } }, '📊 Investi ce mois-ci'),
+      h('span.muted', { style: { fontSize: 'var(--fs-sm)', display: 'inline-flex', alignItems: 'center', gap: '6px' } }, glyph('chart', 16), 'Investi ce mois-ci'),
       h('span.num.sensitive', { style: { fontWeight: '600' } }, money(invested, { decimals: 0 })),
     ) : null,
 
@@ -294,6 +324,67 @@ function renderMonth({ current, previous, lastKnown }) {
       ),
     ) : null,
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Objectifs                                                           */
+/* ------------------------------------------------------------------ */
+
+async function renderGoals(host) {
+  try {
+    const goals = (await repo.listGoals()).filter((g) => g.is_active !== false);
+    if (!goals.length) {
+      mount(host, section('Mes objectifs', {},
+        h('button.card.card--tap', {
+          type: 'button', 'data-sound': 'select',
+          style: { width: '100%', textAlign: 'left', display: 'flex', gap: '12px', alignItems: 'center' },
+          onclick: () => navigate('/profil/objectifs'),
+        },
+          h('span.lead-icon', { style: { color: 'var(--accent)' } }, glyph('target')),
+          h('div', { style: { flex: '1' } },
+            h('div', { style: { fontWeight: '600' } }, 'Fixe-toi un objectif'),
+            h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
+              'Patrimoine, épargne de précaution, quantité de BTC…')),
+          h('span', { style: { color: 'var(--text-3)' } }, '›'))));
+      return;
+    }
+
+    const [{ currentValue, formatGoal, GOAL_KINDS, readableEmoji }, netWorth, summary, holdings] =
+      await Promise.all([
+        import('./alerts.js'),
+        repo.getNetWorth().catch(() => null),
+        repo.monthlySummary().catch(() => null),
+        repo.getHoldings().catch(() => []),
+      ]);
+
+    mount(host, section('Mes objectifs', {
+      action: seeAll('Gérer', () => navigate('/profil/objectifs')),
+    }, h('div', { style: { display: 'grid', gap: '12px' } },
+      goals.slice(0, 3).map((goal) => {
+        const current = currentValue(goal, { netWorth, summary, holdings });
+        const target = Number(goal.target_value);
+        const known = Number.isFinite(current) && target > 0;
+        const progress = known ? Math.max(0, Math.min(100, (current / target) * 100)) : null;
+        const kind = GOAL_KINDS.find((k) => k.key === goal.kind);
+        return h('button.card.card--tap', {
+          type: 'button', 'data-sound': 'select',
+          style: { width: '100%', textAlign: 'left' },
+          onclick: () => navigate('/profil/objectifs'),
+        },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' } },
+            h('div.eyebrow', readableEmoji(goal.emoji) ?? glyph(kind?.icon ?? 'target', 16), ' ', goal.label),
+            h('div.num', { style: { fontWeight: '700', color: progress >= 100 ? 'var(--accent)' : 'var(--text)' } },
+              progress === null ? '—' : `${Math.round(progress)} %`),
+          ),
+          h('div.meter', { style: { marginTop: '10px', height: '8px' } },
+            h('div.meter__fill', { style: { width: `${progress ?? 0}%`, background: 'var(--accent)' } })),
+          h('div.muted.num.sensitive', { style: { fontSize: 'var(--fs-sm)', marginTop: '8px' } },
+            `${formatGoal(current, goal.kind)} sur ${formatGoal(target, goal.kind)}`),
+        );
+      }))));
+  } catch {
+    mount(host, h('div'));   // un objectif illisible ne doit pas bloquer l'accueil
+  }
 }
 
 /* ------------------------------------------------------------------ */
@@ -323,25 +414,24 @@ async function renderInsights(host) {
 
   const activeSubs = recurring.filter((r) => r.is_active && r.direction === 'debit');
   if (activeSubs.length) {
-    const monthlyCost = activeSubs.reduce((total, r) => {
-      const perMonth = { weekly: 30.44 / 7, biweekly: 30.44 / 14, monthly: 1,
-        bimonthly: 0.5, quarterly: 1 / 3, yearly: 1 / 12 }[r.cadence] ?? 0;
-      return total + Number(r.average_amount) * perMonth;
-    }, 0);
+    // Même calcul que l'écran Récurrents : deux formules recopiées finissent
+    // toujours par afficher deux montants différents.
+    const { monthlyRecurringCost } = await import('../engine/recurring.js');
+    const monthlyCost = monthlyRecurringCost(activeSubs);
 
     cards.push(h('button.card.card--tap', {
       type: 'button', 'data-sound': 'select',
       style: { textAlign: 'left', width: '100%' },
       onclick: () => navigate('/banque/recurrent'),
     },
-      h('div.eyebrow', '🔄 Paiements récurrents'),
+      h('div.eyebrow', glyph('refresh', 16), ' Sorties régulières'),
       h('div', { style: { marginTop: '6px' } },
         h('span.num.sensitive', { style: { fontSize: '22px', fontWeight: '700' } },
           money(monthlyCost, { decimals: 0 })),
         h('span.muted', ' par mois'),
       ),
       h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } },
-        `${activeSubs.length} prélèvements réguliers détectés`),
+        `${activeSubs.length} ${activeSubs.length > 1 ? 'sorties régulières détectées' : 'sortie régulière détectée'} · voir ce qui arrive`),
     ));
   }
 
@@ -357,6 +447,10 @@ async function renderInsights(host) {
   mount(host, h('div', { style: { display: 'grid', gap: '12px' } }, cards));
 }
 
+const TONE_COLOR = {
+  warning: 'var(--warn)', danger: 'var(--down)', success: 'var(--up)', info: 'var(--info)',
+};
+
 function insightCard(insight) {
   const tone = { warning: glyph('alert'), danger: glyph('dot'), success: glyph('checkCircle'), info: glyph('bulb') }[insight.severity] || glyph('bulb');
 
@@ -366,7 +460,7 @@ function insightCard(insight) {
     onclick: () => showInsight(insight),
   },
     h('div', { style: { display: 'flex', gap: '12px', alignItems: 'flex-start' } },
-      h('span', { style: { fontSize: '20px' } }, tone),
+      h('span.lead-icon', { style: { color: TONE_COLOR[insight.severity] ?? 'var(--text-2)' } }, tone),
       h('div', { style: { minWidth: 0 } },
         h('div', { style: { fontWeight: '600' } }, insight.title),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '2px' } }, insight.body),

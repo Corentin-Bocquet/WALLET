@@ -26,6 +26,8 @@ import { money, day as fmtDay } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import { parseStatement, SUPPORTED_FORMATS } from '../data/import.js';
 
+const KIND_LABEL = { bank: 'Banque', exchange: 'Exchange crypto', broker: 'Courtier', cash: 'Espèces', manual: 'Saisie manuelle' };
+
 export async function accountsScreen() {
   const screen = h('main.screen');
   screen.append(subScreenHead('Comptes et connexions', { right: currencyToggle({ compact: true }) }));
@@ -74,20 +76,21 @@ export async function accountsScreen() {
               ({ bank: glyph('bank'), exchange: glyph('coin'), broker: glyph('trendUp'), cash: glyph('cash'), manual: glyph('pen') })[account.kind] ?? glyph('box')),
             h('div.row__main',
               h('div.row__title', account.label),
-              h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : account.provider),
+              h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : (KIND_LABEL[account.kind] ?? 'Compte')),
             ),
             (() => {
               const positions = positionsByAccount.get(account.id) ?? 0;
-              const cash = Number(account.balance);
-              const hasCash = Number.isFinite(cash);
+              const hasCash = account.balance !== null && account.balance !== undefined
+                && account.balance !== '' && Number.isFinite(Number(account.balance));
+              const cash = hasCash ? Number(account.balance) : 0;
               const known = hasCash || positions > 0;
               return h('div.row__end',
                 known
                   ? h('div.row__value.sensitive', money((hasCash ? cash : 0) + positions))
                   : h('div.row__value.unknown', '—'),
-                positions > 0
-                  ? h('div.row__sub.muted-2', `dont ${money(positions)} en positions`)
-                  : h('div.row__sub.muted-2', ''),
+                positions > 0 && cash > 0
+                  ? h('div.row__sub.muted-2', `dont ${money(cash, { decimals: 0 })} de liquidités`)
+                  : h('div.row__sub.muted-2', positions > 0 ? 'positions crypto' : ''),
               );
             })(),
           )))

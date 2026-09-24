@@ -8,7 +8,7 @@ import {
 } from '../_shared/http.ts';
 import { decryptSecret } from '../_shared/crypto.ts';
 import { okxBalances, okxFills } from '../_shared/okx.ts';
-import { writeHoldings } from '../_shared/sync.ts';
+import { writeHoldings, quoteCurrency, latestEurRates, priceInEur } from '../_shared/sync.ts';
 
 const MIN_INTERVAL_SECONDS = 60;
 
@@ -96,14 +96,23 @@ async function importFills(
 
   const { data: assets } = await service.from('assets').select('id, symbol');
   const bySymbol = new Map((assets ?? []).map((a) => [a.symbol, a.id]));
+  const rates = await latestEurRates(service);
 
   const rows = fills.map((fill) => {
     const [base] = String(fill.pair ?? '').split('-');
     const assetId = bySymbol.get(base);
     if (!assetId) return null;
+    // BTC-USDT se paie en dollars : le prix est ramené en euros, la devise de
+    // tout l'historique auquel il sera comparé.
+    const quote = quoteCurrency(String(fill.pair ?? ''));
+    const price = priceInEur(fill.price, quote, rates);
+    if (price === null) return null;
     return {
       user_id: userId, account_id: accountId, asset_id: assetId,
-      side: fill.side, quantity: fill.quantity, price: fill.price, fee: fill.fee,
+      side: fill.side, quantity: fill.quantity, price, fee: String(fill.fee_currency ?? '').toUpperCase() === base
+        // Frais pris dans l'actif acheté : leur valeur en euros au prix d'exécution.
+        ? (Number(fill.fee) || 0) * price
+        : priceInEur(fill.fee, quoteCurrency(String(fill.fee_currency ?? '')) ?? quote, rates),
       currency: 'EUR', executed_at: fill.executed_at,
       external_id: fill.external_id, source: 'okx',
     };

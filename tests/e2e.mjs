@@ -25,6 +25,12 @@ page.on('pageerror', (e) => errors.push('PAGEERROR: ' + e.message));
 page.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
 
 await page.addInitScript(() => {
+  // app/config.local.js est versionné et pointe vers le vrai projet
+  // Supabase : sans ce verrou, l'application démarre sur l'écran de
+  // connexion et le parcours ne voit jamais la démonstration. Intercepter la
+  // requête ne suffit pas, le service worker la ressert depuis son cache au
+  // rechargement ; on fige donc la variable qu'elle remplit.
+  Object.defineProperty(window, 'WALLET_CONFIG', { get: () => ({}), set: () => {}, configurable: false });
   localStorage.setItem('wallet.demo.optin', '1');
   localStorage.setItem('wallet.installHint', '1');
 });
@@ -39,8 +45,8 @@ const step = (label) => console.log(`  · ${label}`);
 /* ---------------------------------------------------------------- */
 console.log('\n1. Navigation entre les cinq sections');
 for (const [route, title] of [
-  ['/', 'Accueil'], ['/marches', 'Marchés'], ['/portefeuille', 'Portefeuille'],
-  ['/opportunites', 'Opportunités'], ['/profil', 'Profil'],
+  ['/', 'Accueil'], ['/banque', 'Budget'], ['/portefeuille', 'Portefeuille'],
+  ['/marches', 'Marchés'], ['/opportunites', 'Marchés'], ['/profil', 'Profil'],
 ]) {
   await go(route);
   const heading = await page.locator('.screen__title').first().textContent();

@@ -10,13 +10,13 @@
 
 import { h, mount, icon } from '../lib/dom.js';
 import { glyph } from '../components/icons.js';
-import { navigate, parseHash } from '../lib/router.js';
+import { navigate, parseHash, refresh } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import { feedback } from '../lib/feedback.js';
 import {
   screenHead, subScreenHead, section, loadingRows, loadingBlock, emptyState,
-  errorState, badge, seeAll, switchRow, asyncBlock,
+  errorState, badge, seeAll, switchRow, asyncBlock, currencyToggle,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo } from '../components/explain.js';
 import { bubbleChart, barList } from '../components/chart.js';
@@ -24,7 +24,7 @@ import { money, pct, day as fmtDay, month as fmtMonth, titleCase, trendClass } f
 import * as repo from '../data/repo.js';
 import { BUCKET_LABEL } from '../engine/normalize.js';
 import { selectSimilarTransactions } from '../engine/categorizer.js';
-import { CADENCE_LABEL, monthlyRecurringCost } from '../engine/recurring.js';
+import { CADENCE_LABEL, monthlyRecurringCost, upcomingCharges } from '../engine/recurring.js';
 
 /* ================================================================== */
 /* Écran principal                                                     */
@@ -37,12 +37,23 @@ export async function bankingScreen() {
   let monthOffset = 0;
   let categoryFilter = query.categorie || null;
 
-  screen.append(subScreenHead('Mes dépenses', {
-    right: h('button.icon-btn', {
-      type: 'button', 'aria-label': 'Règles et mémoire', 'data-sound': 'select',
-      onclick: () => navigate('/banque/regles'),
-    }, glyph('settings')),
-  }));
+  screen.append(screenHead('Budget', { right: currencyToggle() }));
+
+  /* Raccourcis : tout ce qui touche au budget est joignable d'ici, sans
+     repasser par l'accueil ou le profil. */
+  const pendingCount = h('span.action-badge', { hidden: true });
+  screen.append(h('div.action-grid', { style: { marginBottom: '22px' } },
+    quickAction('question', 'À classer', () => navigate('/banque/a-classer'), pendingCount),
+    quickAction('refresh', 'Récurrents', () => navigate('/banque/recurrent')),
+    quickAction('brain', 'Règles', () => navigate('/banque/regles')),
+    quickAction('inbox', 'Importer', () => navigate('/profil/comptes')),
+  ));
+  repo.listTransactions({ status: 'active', limit: 2000 })
+    .then((rows) => {
+      const n = rows.filter((t) => t.needsConfirmation).length;
+      if (n) { pendingCount.textContent = n > 99 ? '99+' : String(n); pendingCount.hidden = false; }
+    })
+    .catch(() => {});
 
   /* Sélecteur de mois, comme sur l'écran de référence */
   const monthPicker = h('div.hscroll', { style: { marginBottom: '20px' } });
@@ -107,9 +118,12 @@ export async function bankingScreen() {
         from, to, categoryId: categoryFilter, status: 'all', limit: 500,
       });
 
+      const recurring = monthOffset === 0 ? await repo.listRecurring().catch(() => []) : [];
+
       mount(body,
         summaryCard(summary),
         toClassifyBanner(transactions),
+        monthOffset === 0 ? weekAheadCard(recurring) : null,
 
         section('Répartition', {
           action: categoryFilter
@@ -126,6 +140,9 @@ export async function bankingScreen() {
                 h('div', { style: { marginTop: '12px' } },
                   barList(breakdown, {
                     onSelect: (item) => { categoryFilter = item.category_id; paint(); },
+                    budgets: new Map(categories
+                      .filter((c) => Number(c.budget_month) > 0)
+                      .map((c) => [c.id, Number(c.budget_month)])),
                   })),
               )
             : emptyState({ emoji: glyph('receipt'), title: 'Aucune dépense ce mois-ci' }),
@@ -133,7 +150,14 @@ export async function bankingScreen() {
 
         section(categoryFilter
           ? `Transactions · ${categories.find((c) => c.id === categoryFilter)?.label ?? ''}`
-          : 'Toutes les transactions', {},
+          : 'Toutes les transactions', {
+          action: transactions.length
+            ? h('button.btn.btn--ghost.btn--sm', {
+                type: 'button', 'data-sound': 'select',
+                onclick: () => exportCsv(transactions, categories, month),
+              }, 'Exporter')
+            : null,
+        },
           transactionList(transactions, categories, paint),
         ),
       );
@@ -147,6 +171,46 @@ export async function bankingScreen() {
   return screen;
 }
 
+/**
+ * Export CSV du mois affiché (ou du filtre en cours).
+ * Séparateur « ; » et virgule décimale : c'est ce qu'Excel et Numbers
+ * attendent en français, un CSV à virgules s'ouvrirait en une seule colonne.
+ */
+function exportCsv(transactions, categories, month) {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const cell = (value) => {
+    const text = String(value ?? '');
+    return /[;"\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const rows = [['Date', 'Libellé', 'Marchand', 'Catégorie', 'Montant', 'Devise', 'Statut']];
+  for (const tx of transactions) {
+    if (tx.status === 'hidden') continue;
+    rows.push([
+      String(tx.booked_at ?? '').slice(0, 10),
+      tx.raw_label ?? '',
+      titleCase(tx.merchant || tx.clean_label || ''),
+      byId.get(tx.category_id)?.label ?? tx.category_label ?? 'Non classé',
+      Number(tx.amount).toFixed(2).replace('.', ','),
+      tx.currency ?? 'EUR',
+      tx.status === 'ignored' ? 'ignorée' : 'active',
+    ]);
+  }
+  // BOM : sans lui, Excel lit l'UTF-8 comme du Latin-1 et casse les accents.
+  const blob = new Blob(['\uFEFF' + rows.map((r) => r.map(cell).join(';')).join('\r\n')],
+    { type: 'text/csv;charset=utf-8' });
+  const link = h('a', { href: URL.createObjectURL(blob), download: `wallet-${month.slice(0, 7)}.csv` });
+  document.body.append(link);
+  link.click();
+  setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
+  toast(`${rows.length - 1} opérations exportées`, { kind: 'success' });
+}
+
+function quickAction(iconName, label, onClick, extra = null) {
+  return h('button', { type: 'button', 'data-sound': 'select', onclick: onClick },
+    h('div.icon-btn.icon-btn--lg', { style: { position: 'relative' } }, glyph(iconName, 22), extra),
+    h('span', label));
+}
+
 function summaryCard(summary) {
   if (!summary) return h('div');
 
@@ -157,12 +221,12 @@ function summaryCard(summary) {
 
   return h('div.card',
     h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px' } },
-      figure('💳 Dépenses', money(expense, { decimals: 0 })),
-      figure('💶 Revenus', income > 0 ? money(income, { decimals: 0 }) : h('span.unknown', '—')),
-      invested > 0 ? figure('📊 Investi', money(invested, { decimals: 0 })) : null,
+      figure([glyph('card', 16), 'Dépenses'], money(expense, { decimals: 0 })),
+      figure([glyph('cash', 16), 'Revenus'], income > 0 ? money(income, { decimals: 0 }) : h('span.unknown', '—')),
+      invested > 0 ? figure([glyph('chart', 16), 'Investi'], money(invested, { decimals: 0 })) : null,
       figure(
         h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-          '🏦 Épargne', explainChip('savings_rate', { label: "taux d'épargne" })),
+          glyph('bank', 16), 'Épargne', explainChip('savings_rate', { label: "taux d'épargne" })),
         rate === null ? h('span.unknown', '—') : `${Math.round(rate)} %`,
         rate === null ? 'revenus inconnus' : money(Number(summary.net_savings), { decimals: 0 }),
       ),
@@ -189,9 +253,10 @@ function toClassifyBanner(transactions) {
     onclick: () => navigate('/banque/a-classer'),
   },
     h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
-      h('span', { style: { fontSize: '22px' } }, glyph('question')),
+      h('span.lead-icon', glyph('question')),
       h('div',
-        h('div', { style: { fontWeight: '600' } }, `${pending.length} transactions à classer`),
+        h('div', { style: { fontWeight: '600' } },
+          `${pending.length} à classer ce mois-ci`),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
           'WALLET hésite. Dites-lui une fois, il retiendra.'),
       ),
@@ -562,7 +627,9 @@ export async function toClassifyScreen() {
   async function paint() {
     try {
       const [transactions, categories] = await Promise.all([
-        repo.listTransactions({ status: 'active', limit: 500 }),
+        // 2 000 et non 500 : au-delà des 500 plus récentes, des opérations
+        // à classer disparaissaient de la file alors que l'accueil les comptait.
+        repo.listTransactions({ status: 'active', limit: 2000 }),
         repo.listCategories(),
       ]);
 
@@ -574,15 +641,30 @@ export async function toClassifyScreen() {
           title: 'Tout est classé',
           body: 'WALLET sait quoi faire de chacune de vos transactions.',
           action: h('button.btn.btn--secondary', { type: 'button', onclick: () => navigate('/banque') },
-            'Retour aux dépenses'),
+            'Retour au budget'),
         }));
         return;
       }
 
+      // Regroupement par marchand : quatorze lignes « Ugc Cine Cite » se
+      // règlent d'un seul geste, pas quatorze.
+      const groups = new Map();
+      for (const tx of pending) {
+        const key = tx.merchant || tx.clean_label || tx.raw_label;
+        if (!groups.has(key)) groups.set(key, []);
+        groups.get(key).push(tx);
+      }
+      const ordered = [...groups.values()].sort((a, b) => b.length - a.length);
+
       mount(body,
         h('p.muted', { style: { marginBottom: '20px' } },
-          `${pending.length} transactions dont WALLET n'est pas sûr. Chaque réponse lui apprend quelque chose.`),
-        h('div.rows', pending.map((tx) => transactionRow(tx, categories, paint))),
+          `${pending.length} ${pending.length > 1 ? 'opérations' : 'opération'} chez `
+          + `${ordered.length} ${ordered.length > 1 ? 'marchands' : 'marchand'}. `
+          + 'Une réponse par marchand suffit : WALLET retiendra.'),
+        h('div', { style: { display: 'grid', gap: '12px' } },
+          ordered.map((items) => (items.length > 1
+            ? pendingGroup(items, categories, paint)
+            : h('div.rows', transactionRow(items[0], categories, paint))))),
       );
     } catch (error) {
       mount(body, errorState(error, { what: 'la file à classer', onRetry: paint }));
@@ -591,6 +673,95 @@ export async function toClassifyScreen() {
 
   await paint();
   return screen;
+}
+
+/**
+ * Carte d'un marchand à classer : la catégorie proposée, confirmable pour
+ * toutes les opérations d'un coup, ou à changer pour toutes.
+ */
+function pendingGroup(items, categories, onChange) {
+  const first = items[0];
+  const name = titleCase(first.merchant || first.clean_label) || first.raw_label;
+  const total = items.reduce((sum, tx) => sum + Number(tx.amount || 0), 0);
+  const suggested = categories.find((c) => c.id === first.category_id);
+  const details = h('div.rows', { hidden: true, style: { marginTop: '12px' } },
+    items.map((tx) => transactionRow(tx, categories, onChange)));
+
+  const applyAll = async (category, button) => {
+    if (button) button.disabled = true;
+    try {
+      // Une à une et non en parallèle : chaque correction renforce la
+      // mémoire du marchand, et l'ordre garde un historique lisible.
+      for (const tx of items) await repo.applyCategoryCorrection(tx.id, category.id, false);
+      feedback.success();
+      toast(`${items.length} opérations classées en ${category.label}. WALLET s'en souviendra.`,
+        { kind: 'success' });
+      onChange?.();
+    } catch (error) {
+      toast(`Impossible d'enregistrer : ${error.message}`, { kind: 'error' });
+      if (button) button.disabled = false;
+    }
+  };
+
+  return h('div.card',
+    h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
+      h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
+        first.emoji || glyph('question')),
+      h('div', { style: { flex: '1', minWidth: '0' } },
+        h('div', { style: { fontWeight: '600' } }, name),
+        h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
+          `${items.length} opérations · `, h('span.num.sensitive', money(total, { decimals: 0 }))),
+      ),
+    ),
+    h('p.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '12px' } },
+      suggested ? `WALLET pense : ${suggested.emoji ?? ''} ${suggested.label}. C'est bien ça ?`
+        : 'WALLET ne sait pas encore où ranger ce marchand.'),
+    h('div', { style: { display: 'flex', gap: '10px', marginTop: '12px' } },
+      suggested ? h('button.btn.btn--sm.btn--primary', {
+        type: 'button', 'data-sound': 'success', style: { flex: '1' },
+        onclick: (event) => applyAll(suggested, event.currentTarget),
+      }, 'Oui, pour tout') : null,
+      h('button.btn.btn--sm.btn--secondary', {
+        type: 'button', 'data-sound': 'sheetOpen', style: { flex: '1' },
+        onclick: () => chooseCategory(categories, first.category_id, (category) => applyAll(category)),
+      }, suggested ? 'Autre catégorie' : 'Choisir'),
+    ),
+    h('button.btn.btn--ghost.btn--sm', {
+      type: 'button', style: { marginTop: '6px', width: '100%' },
+      onclick: (event) => {
+        details.hidden = !details.hidden;
+        event.currentTarget.textContent = details.hidden ? 'Voir le détail' : 'Masquer le détail';
+      },
+    }, 'Voir le détail'),
+    details,
+  );
+}
+
+/** Feuille de choix de catégorie, indépendante d'une transaction précise. */
+function chooseCategory(categories, currentId, onPick) {
+  openSheet({
+    title: 'Choisir une catégorie',
+    build: ({ close }) => h('div',
+      [
+        ['Dépenses', categories.filter((c) => c.kind === 'expense')],
+        ['Revenus', categories.filter((c) => c.kind === 'income')],
+        ['Investissement', categories.filter((c) => c.kind === 'investment')],
+        ['Transferts', categories.filter((c) => c.kind === 'transfer')],
+      ].filter(([, list]) => list.length).map(([title, list]) => h('div', { style: { marginTop: '16px' } },
+        h('div.muted-2', { style: { fontSize: 'var(--fs-xs)', fontWeight: '600',
+          textTransform: 'uppercase', letterSpacing: '.06em', marginBottom: '6px' } }, title),
+        h('div.rows', list.map((category) => h('button.row', {
+          type: 'button', 'data-sound': 'success',
+          onclick: () => { close(); onPick(category); },
+        },
+          h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } }, category.emoji),
+          h('div.row__main', h('div.row__title', category.label)),
+          h('div.row__end',
+            category.id === currentId ? h('span', { style: { color: 'var(--accent)' } }, glyph('check')) : null),
+        ))),
+      )),
+    ),
+  });
 }
 
 /* ================================================================== */
@@ -605,19 +776,20 @@ export async function recurringScreen() {
       type: 'button', 'aria-label': 'Recalculer', 'data-sound': 'select',
       onclick: async (event) => {
         const button = event.currentTarget;
-        button.textContent = '…';
         button.disabled = true;
+        button.classList.add('is-spinning');
         try {
           await repo.refreshRecurring();
           toast('Récurrences recalculées', { kind: 'success' });
-          setTimeout(() => window.location.reload(), 500);
+          refresh();
         } catch (error) {
           toast(error.message, { kind: 'error' });
-          button.textContent = '⟳';
+        } finally {
           button.disabled = false;
+          button.classList.remove('is-spinning');
         }
       },
-    }, '⟳'),
+    }, glyph('refresh')),
   }));
 
   const body = h('div');
@@ -642,15 +814,16 @@ export async function recurringScreen() {
 
     mount(body,
       h('div.card',
-        h('div.eyebrow', 'Coût mensuel de vos abonnements'),
+        h('div.eyebrow', 'Sorties régulières, par mois'),
         h('div.display.num.sensitive', { style: { fontSize: '32px', marginTop: '4px' } },
           money(monthly, { decimals: 0 })),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
-          `soit ${money(monthly * 12, { decimals: 0 })} par an · ${debits.filter((r) => r.is_active).length} actifs`),
+          `soit ${money(monthly * 12, { decimals: 0 })} par an · ${debits.filter((r) => r.is_active).length} actives`),
         h('p.explain__source', { style: { marginTop: '12px' } },
-          'Les cadences non mensuelles sont ramenées à une base mensuelle pour permettre la comparaison.'),
+          'Abonnements, loyer, mais aussi courses hebdomadaires, virements d’épargne et achats programmés : tout ce qui revient à rythme régulier. Les cadences non mensuelles sont ramenées au mois.'),
       ),
 
+      upcomingSection(recurring),
       debits.length ? section('Sorties régulières', {}, recurringList(debits)) : null,
       credits.length ? section('Entrées régulières', {}, recurringList(credits)) : null,
     );
@@ -659,6 +832,61 @@ export async function recurringScreen() {
   }
 
   return screen;
+}
+
+/** Ce qui va sortir du compte dans les 30 prochains jours, date par date. */
+function upcomingSection(recurring) {
+  const charges = upcomingCharges(recurring, { days: 30 });
+  if (!charges.length) return null;
+  const total = charges.reduce((sum, c) => sum + c.amount, 0);
+  return section('À venir sur 30 jours', {},
+    h('p.muted', { style: { fontSize: 'var(--fs-sm)', marginBottom: '8px' } },
+      `${charges.length} ${charges.length > 1 ? 'prélèvements attendus' : 'prélèvement attendu'} · `,
+      h('span.num.sensitive', money(total, { decimals: 0 }))),
+    h('div.rows', charges.map((c) => h('div.row',
+      h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '12px', fontWeight: '700', lineHeight: '1.1', textAlign: 'center' } },
+        dayBadge(c.date)),
+      h('div.row__main',
+        h('div.row__title', titleCase(c.recurring.merchant || c.recurring.label) || c.recurring.label),
+        h('div.row__sub', CADENCE_LABEL[c.recurring.cadence] ?? '')),
+      h('div.row__end', h('div.row__value.num.sensitive', money(-c.amount, { decimals: 2 }))),
+    ))),
+    h('p.explain__source', { style: { marginTop: '12px' } },
+      'Dates estimées à partir du rythme habituel de chaque prélèvement ; le jour exact peut varier de quelques jours.'),
+  );
+}
+
+function dayBadge(isoDate) {
+  const d = new Date(`${isoDate}T12:00:00`);
+  return h('div',
+    h('div', { style: { fontSize: '15px' } }, String(d.getDate())),
+    h('div.muted', { style: { fontSize: '10px', textTransform: 'uppercase' } },
+      d.toLocaleDateString('fr-FR', { month: 'short' }).replace('.', '')));
+}
+
+/** Encart du Budget : les prélèvements des 7 prochains jours, d'un coup d'œil. */
+function weekAheadCard(recurring) {
+  const charges = upcomingCharges(recurring, { days: 7 });
+  if (!charges.length) return h('div');
+  const total = charges.reduce((sum, c) => sum + c.amount, 0);
+  const names = charges.slice(0, 3)
+    .map((c) => titleCase(c.recurring.merchant || c.recurring.label) || c.recurring.label).join(', ');
+  return h('button.card.card--tap', {
+    type: 'button', 'data-sound': 'select',
+    style: { marginTop: '16px', width: '100%', textAlign: 'left' },
+    onclick: () => navigate('/banque/recurrent'),
+  },
+    h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
+      h('span.lead-icon', { style: { color: 'var(--info)' } }, glyph('clock')),
+      h('div', { style: { flex: '1', minWidth: '0' } },
+        h('div', { style: { fontWeight: '600' } },
+          `Cette semaine : `, h('span.num.sensitive', money(total, { decimals: 0 })),
+          ` en ${charges.length} ${charges.length > 1 ? 'prélèvements' : 'prélèvement'}`),
+        h('div.muted', { style: { fontSize: 'var(--fs-sm)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' } },
+          names + (charges.length > 3 ? '…' : ''))),
+      h('span', { style: { color: 'var(--text-3)' } }, '›'),
+    ),
+  );
 }
 
 function recurringList(items) {

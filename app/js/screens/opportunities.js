@@ -12,11 +12,12 @@ import { openSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import {
   screenHead, section, loadingRows, loadingBlock, emptyState, errorState,
-  badge, estimateBadge, accordion, seeAll,
+  badge, estimateBadge, accordion, seeAll, subNav, MARKETS_NAV, currencyToggle, zoneTag,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo } from '../components/explain.js';
 import { zoneBar, areaChart } from '../components/chart.js';
-import { money, pct, num, range, day as fmtDay, trendClass } from '../lib/fmt.js';
+import { money, pct, num, range, day as fmtDay, trendClass, score as fmtScore } from '../lib/fmt.js';
+import { assetAvatar } from '../components/brand.js';
 import * as repo from '../data/repo.js';
 import { computeIndicators } from '../engine/indicators.js';
 import { computeInvestmentScore, ZONE_META } from '../engine/score.js';
@@ -26,9 +27,10 @@ import { showScoreReasoning } from './markets.js';
 
 export async function opportunitiesScreen() {
   const screen = h('main.screen');
-  screen.append(screenHead('Opportunités', {
-    subtitle: 'Ce que disent les données aujourd’hui — pas ce qui va se passer',
-  }));
+  screen.append(screenHead('Marchés', { right: currencyToggle() }));
+  screen.append(subNav(MARKETS_NAV, '/opportunites'));
+  screen.append(h('p.muted', { style: { fontSize: 'var(--fs-sm)', margin: '-6px 0 8px' } },
+    'Ce que disent les données aujourd’hui, pas ce qui va se passer.'));
 
   const zones = h('div');
   screen.append(section('Zones actuelles', { explain: 'investment_score' }, zones));
@@ -108,15 +110,14 @@ async function renderAll(hosts) {
           type: 'button', 'data-sound': 'sheetOpen',
           onclick: () => showScoreReasoning(asset, result),
         },
-          h('div.avatar', { style: { background: 'var(--surface-2)', fontWeight: '700', fontSize: '13px' } },
-            asset.symbol.slice(0, 3)),
+          assetAvatar(asset),
           h('div.row__main',
             h('div.row__title', asset.name),
-            h('div.row__sub', `${zone.emoji ?? ''} ${zone.label ?? 'zone inconnue'}`),
+            h('div.row__sub', zoneTag(zone)),
           ),
           h('div.row__end',
             h('div.row__value', { style: { color: zone.color } },
-              result.score === null ? '—' : `${result.score}`),
+              result.score === null ? '—' : fmtScore(result.score)),
             h('div.row__sub', result.confidence < 0.75
               ? `${Math.round(result.confidence * 100)} % de facteurs`
               : '/100'),
@@ -148,7 +149,7 @@ function zoneLegend(model) {
         style: { gridTemplateColumns: 'auto 1fr auto', minHeight: '44px' },
       },
         h('div.avatar.avatar--dot', { style: { background: meta.color } }),
-        h('div.row__main', h('div.row__title', { style: { fontWeight: '500' } }, `${meta.emoji} ${meta.label}`)),
+        h('div.row__main', h('div.row__title', { style: { fontWeight: '500' } }, meta.label)),
         h('div.row__end', h('div.row__sub',
           key === 'distribution' ? `< ${thresholds.expensive ?? 30}` : `≥ ${thresholds[key] ?? ''}`)),
       ))),
@@ -258,8 +259,7 @@ async function renderAlts(host, btc, assets) {
 
           h('div.rows', { style: { marginTop: '16px' } },
             rows.map(({ alt, result }) => h('div.row',
-              h('div.avatar', { style: { background: 'var(--surface-2)', fontWeight: '700', fontSize: '12px' } },
-                alt.symbol.slice(0, 3)),
+              assetAvatar(alt),
               h('div.row__main',
                 h('div.row__title', alt.symbol),
                 h('div.row__sub', `Prix actuel ${money(alt.quote?.price)}`),
@@ -311,7 +311,7 @@ async function renderBacktest(host, btc, model) {
           }),
           h('div.row__main',
             h('div.row__title', label, key === comparison.best ? badge('meilleur', 'accent') : null),
-            h('div.row__sub', `${result.trades} achats · ${money(result.invested, { decimals: 0 })} investis`),
+            h('div.row__sub', `${result.trades} ${result.trades > 1 ? 'achats' : 'achat'} · ${money(result.invested, { decimals: 0 })} investis`),
           ),
           h('div.row__end',
             h('div.row__value.sensitive', money(result.final_value, { decimals: 0 })),

@@ -14,7 +14,7 @@ import { toast } from '../lib/toast.js';
 import { setFeedbackPrefs } from '../lib/feedback.js';
 import {
   screenHead, subScreenHead, section, loadingRows, loadingBlock, emptyState,
-  errorState, switchRow, badge, accordion, asyncBlock,
+  errorState, switchRow, badge, accordion, asyncBlock, zoneTag,
 } from '../components/ui.js';
 import { explainChip } from '../components/explain.js';
 import { money, initials, day as fmtDay, ago } from '../lib/fmt.js';
@@ -393,7 +393,7 @@ export async function engineScreen() {
 
       return h('div.switch-row',
         h('div',
-          h('div.switch-row__label', `${ZONE_META[key].emoji} ${ZONE_META[key].label}`),
+          h('div.switch-row__label', zoneTag(ZONE_META[key])),
           h('div.switch-row__hint', 'à partir de'),
         ),
         input,

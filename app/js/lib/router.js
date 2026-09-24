@@ -76,6 +76,9 @@ function match(segments) {
 let renderToken = 0;
 
 async function render() {
+  // refresh() peut être appelé avant start() : l'arrivée des taux de change
+  // déclenche un nouveau rendu pendant que l'application démarre encore.
+  if (!container) return;
   const token = ++renderToken;
   const { pathname, segments, query } = parseHash();
 
@@ -83,7 +86,9 @@ async function render() {
   if (current) scrollMemory.set(current.pathname, window.scrollY);
 
   const found = match(segments) || (segments.length === 0 ? match([]) : null);
-  const handler = found?.handler || routes.get('/') || notFound;
+  // Une adresse inconnue (lien ancien, faute de frappe) affichait l'accueil
+  // sans rien dire : on croyait avoir ouvert le bon écran.
+  const handler = found?.handler || notFound || (() => notFoundView());
 
   if (!handler) return;
 
@@ -110,12 +115,23 @@ async function render() {
   window.dispatchEvent(new CustomEvent('wallet:navigated', { detail: current }));
 }
 
+function notFoundView() {
+  const node = document.createElement('div');
+  node.className = 'screen';
+  node.innerHTML = `
+    <div class="empty">
+      <div class="empty__title">Écran introuvable</div>
+      <p class="muted">Ce lien ne mène nulle part, ou l'écran a changé de place.</p>
+      <a class="btn btn--primary" style="margin-top:24px" href="#/">Revenir à l'accueil</a>
+    </div>`;
+  return node;
+}
+
 function errorView(error) {
   const node = document.createElement('div');
   node.className = 'screen';
   node.innerHTML = `
     <div class="empty">
-      <div class="empty__emoji">⚠️</div>
       <div class="empty__title">Cet écran n'a pas pu s'afficher</div>
       <p class="muted">${escapeHtml(error?.message || 'Erreur inconnue')}</p>
       <button class="btn btn--secondary" style="margin-top:24px"

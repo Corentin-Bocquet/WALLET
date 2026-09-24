@@ -14,10 +14,12 @@ import { toast } from '../lib/toast.js';
 import {
   screenHead, subScreenHead, section, bigAmount, freshness, loadingRows, currencyToggle,
   emptyState, asyncBlock, badge, changeBadge, estimateBadge, accordion, errorState,
+  subNav, MARKETS_NAV, zoneTag,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo, showReasoning } from '../components/explain.js';
 import { arcGauge, areaChart, sparkline, zoneBar } from '../components/chart.js';
-import { money, pct, num, compact, day as fmtDay, trendClass } from '../lib/fmt.js';
+import { money, pct, num, compact, day as fmtDay, trendClass, score as fmtScore, bigMoney } from '../lib/fmt.js';
+import { assetAvatar } from '../components/brand.js';
 import * as repo from '../data/repo.js';
 import { computeIndicators, fearGreedLabel } from '../engine/indicators.js';
 import { computeInvestmentScore, ZONE_META, FACTOR_HELP } from '../engine/score.js';
@@ -33,6 +35,7 @@ const TABS = [
 export async function marketsScreen() {
   const screen = h('main.screen');
   screen.append(screenHead('Marchés', { right: currencyToggle() }));
+  screen.append(subNav(MARKETS_NAV, '/marches'));
 
   /* Baromètre du marché : deux chiffres, pas un tableau de bord. */
   const barometer = h('div');
@@ -49,13 +52,18 @@ export async function marketsScreen() {
   /* Onglets */
   let activeTab = 'watch';
   const list = h('div');
+  // Un seul chemin pour changer d'onglet : le bouton « Parcourir toutes les
+  // cryptos » de la liste vide changeait la liste sans allumer l'onglet.
+  const selectTab = (key) => {
+    activeTab = key;
+    [...tabs.children].forEach((b, i) => b.setAttribute('aria-selected', String(TABS[i].key === key)));
+    paint();
+  };
   const tabs = h('div.tabs', { style: { marginTop: '4px' } },
     TABS.map((tab) => h('button', {
       type: 'button', 'aria-selected': String(tab.key === activeTab), 'data-sound': 'select',
       onclick: (event) => {
-        activeTab = tab.key;
-        [...tabs.children].forEach((b, i) => b.setAttribute('aria-selected', String(TABS[i].key === tab.key)));
-        paint();
+        selectTab(tab.key);
         event.currentTarget.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
       },
     }, tab.label)),
@@ -78,7 +86,9 @@ export async function marketsScreen() {
       const query = search.value.trim().toLowerCase();
       let rows = assets;
 
-      if (activeTab === 'watch') rows = rows.filter((a) => watchIds.has(a.id));
+      // Une recherche porte sur toutes les cryptos : chercher « Cardano »
+      // depuis « Ma liste » répondait « Aucun résultat » alors qu'elle existe.
+      if (activeTab === 'watch' && !query) rows = rows.filter((a) => watchIds.has(a.id));
       if (activeTab === 'winners') {
         rows = rows.filter((a) => (a.quote?.change_24h ?? 0) > 0)
           .sort((a, b) => (b.quote?.change_24h ?? 0) - (a.quote?.change_24h ?? 0));
@@ -101,7 +111,7 @@ export async function marketsScreen() {
             : 'Essayez un autre nom ou un autre symbole.',
           action: activeTab === 'watch'
             ? h('button.btn.btn--secondary', {
-                type: 'button', onclick: () => { activeTab = 'all'; paint(); },
+                type: 'button', onclick: () => selectTab('all'),
               }, 'Parcourir toutes les cryptos')
             : null,
         }));
@@ -130,8 +140,7 @@ function assetRow(asset, watched) {
     type: 'button', 'data-sound': 'select',
     onclick: () => navigate(`/marches/${asset.id}`),
   },
-    h('div.avatar', { style: { background: 'var(--surface-2)', fontWeight: '700', fontSize: '13px' } },
-      asset.image_url ? h('img', { src: asset.image_url, alt: '' }) : asset.symbol.slice(0, 3)),
+    assetAvatar(asset),
     h('div.row__main',
       h('div.row__title', asset.name, watched ? h('span', { style: { color: 'var(--accent)' } }, ' ★') : null),
       h('div.row__sub', asset.symbol),
@@ -291,8 +300,8 @@ export async function assetScreen({ params }) {
 
 function keyFigures(quote) {
   const rows = [
-    ['Capitalisation', quote.market_cap ? money(quote.market_cap, { compact: true, decimals: 0 }) : '—'],
-    ['Volume 24 h', quote.volume_24h ? money(quote.volume_24h, { compact: true, decimals: 0 }) : '—'],
+    ['Capitalisation', quote.market_cap ? bigMoney(quote.market_cap) : '—'],
+    ['Volume 24 h', quote.volume_24h ? bigMoney(quote.volume_24h) : '—'],
     ['Plus haut historique', quote.ath ? money(quote.ath) : '—', quote.ath_date ? fmtDay(quote.ath_date, { long: true }) : null],
     ['Distance au plus haut',
       quote.ath && quote.price ? pct(((quote.price / quote.ath) - 1) * 100) : '—', null, 'drawdown'],
@@ -363,11 +372,11 @@ export function scoreCard(asset, result, model) {
         h('div.eyebrow', `${asset.symbol} · Investment Score`),
         h('div', { style: { display: 'flex', alignItems: 'baseline', gap: '8px', marginTop: '4px' } },
           h('span.num', { style: { fontSize: '38px', fontWeight: '700' } },
-            result.score === null ? '—' : result.score),
+            result.score === null ? '—' : fmtScore(result.score)),
           h('span.muted', { style: { fontSize: '18px' } }, '/100'),
         ),
       ),
-      result.zone ? badge(`${zone.emoji} ${zone.label}`) : null,
+      result.zone ? zoneTag(zone, { asBadge: true }) : null,
     ),
 
     h('div', { style: { marginTop: '18px' } },
@@ -380,11 +389,11 @@ export function scoreCard(asset, result, model) {
       h('button.btn.btn--sm.btn--secondary', {
         type: 'button', 'data-sound': 'sheetOpen',
         onclick: () => showScoreReasoning(asset, result),
-      }, 'Pourquoi ce score ?'),
+      }, 'Pourquoi ?'),
       h('button.btn.btn--sm.btn--ghost', {
         type: 'button', 'data-sound': 'select',
         onclick: () => navigate('/profil/moteur'),
-      }, 'Régler les poids'),
+      }, 'Régler le score'),
     ),
 
     result.confidence < 0.75

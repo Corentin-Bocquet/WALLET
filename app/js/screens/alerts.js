@@ -18,13 +18,13 @@ import * as repo from '../data/repo.js';
 import { ZONE_META } from '../engine/score.js';
 
 const SUBJECTS = [
-  { key: 'price', label: 'Prix d’un actif', emoji: glyph('coin'), needs: 'asset', unit: '€' },
-  { key: 'score', label: 'Investment Score', emoji: glyph('target'), needs: 'asset', unit: '/100' },
-  { key: 'zone', label: 'Changement de zone', emoji: glyph('traffic'), needs: 'asset', unit: '' },
-  { key: 'net_worth', label: 'Patrimoine total', emoji: glyph('chart'), needs: null, unit: '€' },
-  { key: 'category_spend', label: 'Dépense sur une catégorie', emoji: glyph('receipt'), needs: 'category', unit: '€' },
-  { key: 'savings_rate', label: 'Taux d’épargne', emoji: glyph('bank'), needs: null, unit: '%' },
-  { key: 'anomaly', label: 'Dépense inhabituelle', emoji: glyph('alert'), needs: null, unit: '' },
+  { key: 'price', label: 'Prix d’un actif', icon: 'coin', needs: 'asset', unit: '€' },
+  { key: 'score', label: 'Investment Score', icon: 'target', needs: 'asset', unit: '/100' },
+  { key: 'zone', label: 'Changement de zone', icon: 'traffic', needs: 'asset', unit: '' },
+  { key: 'net_worth', label: 'Patrimoine total', icon: 'chart', needs: null, unit: '€' },
+  { key: 'category_spend', label: 'Dépense sur une catégorie', icon: 'receipt', needs: 'category', unit: '€' },
+  { key: 'savings_rate', label: 'Taux d’épargne', icon: 'bank', needs: null, unit: '%' },
+  { key: 'anomaly', label: 'Dépense inhabituelle', icon: 'alert', needs: null, unit: '' },
 ];
 
 const OPERATORS = [
@@ -62,7 +62,7 @@ export async function alertsScreen() {
             onclick: () => editAlert(alert, paint),
           },
             h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } },
-              SUBJECTS.find((s) => s.key === alert.subject)?.emoji ?? glyph('bell')),
+              glyph(SUBJECTS.find((s) => s.key === alert.subject)?.icon ?? 'bell')),
             h('div.row__main',
               h('div.row__title', alert.label),
               h('div.row__sub', describeAlert(alert)),
@@ -147,7 +147,7 @@ function editAlert(alert, onChange) {
           paintTarget();
         },
       }, SUBJECTS.map((s) =>
-        h('option', { value: s.key, selected: alert?.subject === s.key }, `${s.emoji} ${s.label}`)));
+        h('option', { value: s.key, selected: alert?.subject === s.key }, s.label)));
 
       let targetSelect = null;
 
@@ -251,12 +251,19 @@ function editAlert(alert, onChange) {
 /* Objectifs                                                           */
 /* ================================================================== */
 
-const GOAL_KINDS = [
-  { key: 'net_worth', label: 'Patrimoine total', emoji: glyph('chart'), unit: '€' },
-  { key: 'savings_rate', label: 'Taux d’épargne mensuel', emoji: glyph('bank'), unit: '%' },
-  { key: 'cash_buffer', label: 'Épargne de précaution', emoji: glyph('buoy'), unit: '€' },
-  { key: 'asset_quantity', label: 'Quantité d’un actif', emoji: '₿', unit: '' },
+// `icon` est un nom de glyphe pour l'affichage ; `emoji` est le texte
+// enregistré en base. Les deux ne sont pas interchangeables : un glyphe est un
+// nœud SVG, qui devenait « [object SVGSVGElement] » une fois écrit en texte.
+export const GOAL_KINDS = [
+  { key: 'net_worth', label: 'Patrimoine total', icon: 'chart', emoji: '📈', unit: '€' },
+  { key: 'savings_rate', label: 'Taux d’épargne mensuel', icon: 'bank', emoji: '🏦', unit: '%' },
+  { key: 'cash_buffer', label: 'Épargne de précaution', icon: 'buoy', emoji: '🛟', unit: '€' },
+  { key: 'asset_quantity', label: 'Quantité d’un actif', icon: 'coin', emoji: '₿', unit: '' },
 ];
+
+/** Un emoji enregistré n'est gardé que s'il est lisible (anciennes saisies corrompues). */
+export const readableEmoji = (value) =>
+  (typeof value === 'string' && value && !value.startsWith('[object') ? value : null);
 
 export async function goalsScreen() {
   const screen = h('main.screen');
@@ -307,7 +314,7 @@ export async function goalsScreen() {
           },
             h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px' } },
               h('div',
-                h('div.eyebrow', `${goal.emoji ?? kind?.emoji ?? glyph('target')} ${goal.label}`),
+                h('div.eyebrow', readableEmoji(goal.emoji) ?? glyph(kind?.icon ?? 'target'), ' ', goal.label),
                 h('div.num.sensitive', { style: { fontSize: '26px', fontWeight: '700', marginTop: '4px' } },
                   known
                     ? formatGoal(current, goal.kind)
@@ -344,7 +351,7 @@ export async function goalsScreen() {
   return screen;
 }
 
-function currentValue(goal, { netWorth, summary, holdings }) {
+export function currentValue(goal, { netWorth, summary, holdings }) {
   switch (goal.kind) {
     case 'net_worth': return netWorth?.total ?? NaN;
     case 'cash_buffer': return netWorth?.cash ?? NaN;
@@ -352,14 +359,16 @@ function currentValue(goal, { netWorth, summary, holdings }) {
       return summary?.savings_rate === null || summary?.savings_rate === undefined
         ? NaN : Number(summary.savings_rate);
     case 'asset_quantity': {
-      const holding = holdings.find((hold) => hold.asset_id === goal.asset_id);
-      return holding ? Number(holding.quantity) : NaN;
+      // Un même actif peut être détenu sur plusieurs comptes (SOL sur Kraken
+      // ET sur OKX) : l'objectif porte sur la quantité totale.
+      const parts = holdings.filter((hold) => hold.asset_id === goal.asset_id);
+      return parts.length ? parts.reduce((sum, hold) => sum + (Number(hold.quantity) || 0), 0) : NaN;
     }
     default: return NaN;
   }
 }
 
-function formatGoal(value, kind) {
+export function formatGoal(value, kind) {
   if (!Number.isFinite(value)) return '—';
   if (kind === 'savings_rate') return `${Math.round(value)} %`;
   if (kind === 'asset_quantity') return String(Math.round(value * 1e6) / 1e6);
@@ -373,7 +382,7 @@ function editGoal(goal, onChange) {
       const label = h('input', { type: 'text', value: goal?.label ?? '', required: true,
         placeholder: 'Ex. : 100 000 € de patrimoine' });
       const kind = h('select', GOAL_KINDS.map((k) =>
-        h('option', { value: k.key, selected: goal?.kind === k.key }, `${k.emoji} ${k.label}`)));
+        h('option', { value: k.key, selected: goal?.kind === k.key }, k.label)));
       const target = h('input', { type: 'number', step: 'any', required: true,
         inputmode: 'decimal', value: goal?.target_value ?? '' });
       const date = h('input', { type: 'date', value: goal?.target_date ?? '' });
@@ -390,7 +399,7 @@ function editGoal(goal, onChange) {
                 kind: kind.value,
                 target_value: Number(target.value),
                 target_date: date.value || null,
-                emoji: GOAL_KINDS.find((k) => k.key === kind.value)?.emoji ?? glyph('target'),
+                emoji: GOAL_KINDS.find((k) => k.key === kind.value)?.emoji ?? '🎯',
               });
               close();
               toast('Objectif enregistré', { kind: 'success' });
