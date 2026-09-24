@@ -150,7 +150,14 @@ export async function bankingScreen() {
 
         section(categoryFilter
           ? `Transactions · ${categories.find((c) => c.id === categoryFilter)?.label ?? ''}`
-          : 'Toutes les transactions', {},
+          : 'Toutes les transactions', {
+          action: transactions.length
+            ? h('button.btn.btn--ghost.btn--sm', {
+                type: 'button', 'data-sound': 'select',
+                onclick: () => exportCsv(transactions, categories, month),
+              }, 'Exporter')
+            : null,
+        },
           transactionList(transactions, categories, paint),
         ),
       );
@@ -162,6 +169,40 @@ export async function bankingScreen() {
   paintMonths();
   await paint();
   return screen;
+}
+
+/**
+ * Export CSV du mois affiché (ou du filtre en cours).
+ * Séparateur « ; » et virgule décimale : c'est ce qu'Excel et Numbers
+ * attendent en français, un CSV à virgules s'ouvrirait en une seule colonne.
+ */
+function exportCsv(transactions, categories, month) {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const cell = (value) => {
+    const text = String(value ?? '');
+    return /[;"\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+  const rows = [['Date', 'Libellé', 'Marchand', 'Catégorie', 'Montant', 'Devise', 'Statut']];
+  for (const tx of transactions) {
+    if (tx.status === 'hidden') continue;
+    rows.push([
+      String(tx.booked_at ?? '').slice(0, 10),
+      tx.raw_label ?? '',
+      titleCase(tx.merchant || tx.clean_label || ''),
+      byId.get(tx.category_id)?.label ?? tx.category_label ?? 'Non classé',
+      Number(tx.amount).toFixed(2).replace('.', ','),
+      tx.currency ?? 'EUR',
+      tx.status === 'ignored' ? 'ignorée' : 'active',
+    ]);
+  }
+  // BOM : sans lui, Excel lit l'UTF-8 comme du Latin-1 et casse les accents.
+  const blob = new Blob(['\uFEFF' + rows.map((r) => r.map(cell).join(';')).join('\r\n')],
+    { type: 'text/csv;charset=utf-8' });
+  const link = h('a', { href: URL.createObjectURL(blob), download: `wallet-${month.slice(0, 7)}.csv` });
+  document.body.append(link);
+  link.click();
+  setTimeout(() => { URL.revokeObjectURL(link.href); link.remove(); }, 1000);
+  toast(`${rows.length - 1} opérations exportées`, { kind: 'success' });
 }
 
 function quickAction(iconName, label, onClick, extra = null) {
