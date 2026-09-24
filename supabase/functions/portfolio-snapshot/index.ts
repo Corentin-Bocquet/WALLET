@@ -13,6 +13,7 @@
 import {
   preflight, json, fail, serviceClient, requireUser, claimSlot, finishSlot,
 } from '../_shared/http.ts';
+import { isStable } from '../_shared/sync.ts';
 
 Deno.serve(async (request) => {
   const early = preflight(request);
@@ -108,6 +109,8 @@ async function snapshotFor(service: ReturnType<typeof serviceClient>, userId: st
     const value = quantity * Number(quote.price);
     const kind = holding.assets?.kind;
     if (kind === 'stock' || kind === 'etf') equity += value;
+    // USDT, USDC… valent une monnaie : ce sont des liquidités, pas de la crypto.
+    else if (isStable(String(holding.assets?.symbol ?? '').toUpperCase())) cash += value;
     else if (kind === 'crypto') crypto += value;
     else other += value;
   }

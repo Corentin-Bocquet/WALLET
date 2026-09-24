@@ -194,6 +194,8 @@ export const DEMO_ASSETS = [
   { symbol: 'ADA', name: 'Cardano', start: 0.28, vol: 0.047, drift: 0.00022, beta: 1.35, rank: 11, supply: 35e9 },
   { symbol: 'DOT', name: 'Polkadot', start: 5.4, vol: 0.049, drift: 0.00005, beta: 1.4, rank: 26, supply: 1.5e9 },
   { symbol: 'MATIC', name: 'Polygon', start: 0.42, vol: 0.052, drift: 0.00010, beta: 1.5, rank: 34, supply: 10e9 },
+  // Stablecoin : suit le dollar, donc presque immobile en euros.
+  { symbol: 'USDC', name: 'USD Coin', start: 0.92, vol: 0.0006, drift: 0, beta: 0, rank: 7, supply: 60e9 },
 ].map((a, i) => ({
   ...a,
   id: `asset-${a.symbol.toLowerCase()}`,
@@ -294,6 +296,13 @@ export const DEMO_HOLDINGS = [
   { account_id: 'acc-okx', symbol: 'SOL', quantity: 24.5, avg_cost: 84 },
   { account_id: 'acc-okx', symbol: 'SUI', quantity: 1250, avg_cost: 1.42 },
   { account_id: 'acc-okx', symbol: 'LINK', quantity: 62, avg_cost: 11.8 },
+  // Même actif sur deux comptes : une seule ligne, deux pastilles.
+  { account_id: 'acc-kraken', symbol: 'SOL', quantity: 3.2, avg_cost: 96 },
+  // Dollars numériques laissés sur l'exchange : des liquidités, pas de la crypto.
+  { account_id: 'acc-kraken', symbol: 'USDC', quantity: 1520, avg_cost: 0.92 },
+  // Poussières de conversion : moins d'un euro, rangées à part.
+  { account_id: 'acc-kraken', symbol: 'DOT', quantity: 0.04 },
+  { account_id: 'acc-okx', symbol: 'MATIC', quantity: 0.6 },
 ];
 
 /** Achats passés, pour l'analyse de comportement et le backtest. */

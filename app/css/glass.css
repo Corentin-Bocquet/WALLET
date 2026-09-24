@@ -1,0 +1,230 @@
+/* ==========================================================================
+   WALLET · Liquid glass
+   Chargé en dernier : il habille les composants existants sans toucher à
+   leur structure. Trois ingrédients, toujours les mêmes :
+     · un fond d'ambiance coloré, sinon le verre n'a rien à réfracter ;
+     · un remplissage translucide + flou d'arrière-plan ;
+     · un liseré clair en haut (le reflet) et une ombre douce en dessous.
+   Le flou n'est posé que sur les surfaces peu nombreuses (cartes, barre,
+   feuilles) : sur chaque ligne de liste, il ralentirait le défilement.
+   ========================================================================== */
+
+:root {
+  --glass-fill:        rgba(255, 255, 255, .055);
+  --glass-fill-strong: rgba(255, 255, 255, .10);
+  --glass-fill-press:  rgba(255, 255, 255, .14);
+  --glass-edge:        rgba(255, 255, 255, .16);
+  --glass-edge-soft:   rgba(255, 255, 255, .08);
+  --glass-shine:       linear-gradient(180deg, rgba(255, 255, 255, .10) 0%, rgba(255, 255, 255, 0) 38%);
+  --glass-shadow:      0 12px 32px rgba(0, 0, 0, .34), inset 0 1px 0 rgba(255, 255, 255, .12);
+  --glass-blur:        blur(22px) saturate(170%);
+  --glass-sheet:       rgba(18, 22, 26, .74);
+  --glass-dock:        rgba(20, 26, 30, .62);
+
+  --ambient-1: rgba(26, 132, 156, .55);   /* bleu canard, en haut à droite */
+  --ambient-2: rgba(191, 242, 58, .10);   /* lime, à gauche */
+  --ambient-3: rgba(124, 77, 255, .20);   /* violet, en bas */
+}
+
+:root[data-theme="light"] {
+  --glass-fill:        rgba(255, 255, 255, .58);
+  --glass-fill-strong: rgba(255, 255, 255, .78);
+  --glass-fill-press:  rgba(255, 255, 255, .92);
+  --glass-edge:        rgba(255, 255, 255, .95);
+  --glass-edge-soft:   rgba(0, 0, 0, .06);
+  --glass-shine:       linear-gradient(180deg, rgba(255, 255, 255, .7) 0%, rgba(255, 255, 255, 0) 45%);
+  --glass-shadow:      0 10px 30px rgba(20, 40, 60, .10), inset 0 1px 0 rgba(255, 255, 255, .9);
+  --glass-sheet:       rgba(248, 250, 252, .82);
+  --glass-dock:        rgba(255, 255, 255, .62);
+  --ambient-1: rgba(90, 170, 190, .30);
+  --ambient-2: rgba(140, 192, 0, .12);
+  --ambient-3: rgba(100, 55, 232, .12);
+  --bg: #EEF2F5;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-theme="light"]) {
+    --glass-fill:        rgba(255, 255, 255, .58);
+    --glass-fill-strong: rgba(255, 255, 255, .78);
+    --glass-fill-press:  rgba(255, 255, 255, .92);
+    --glass-edge:        rgba(255, 255, 255, .95);
+    --glass-edge-soft:   rgba(0, 0, 0, .06);
+    --glass-shine:       linear-gradient(180deg, rgba(255, 255, 255, .7) 0%, rgba(255, 255, 255, 0) 45%);
+    --glass-shadow:      0 10px 30px rgba(20, 40, 60, .10), inset 0 1px 0 rgba(255, 255, 255, .9);
+    --glass-sheet:       rgba(248, 250, 252, .82);
+    --glass-dock:        rgba(255, 255, 255, .62);
+    --ambient-1: rgba(90, 170, 190, .30);
+    --ambient-2: rgba(140, 192, 0, .12);
+    --ambient-3: rgba(100, 55, 232, .12);
+    --bg: #EEF2F5;
+  }
+}
+
+/* — Fond d'ambiance ———————————————————————————————————————— */
+html { background: var(--bg); }
+body { background: transparent; isolation: isolate; }
+body::before {
+  content: "";
+  position: fixed;
+  inset: -10%;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 45% at 92% 4%, var(--ambient-1), transparent 70%),
+    radial-gradient(45% 40% at 0% 42%, var(--ambient-2), transparent 70%),
+    radial-gradient(60% 45% at 70% 104%, var(--ambient-3), transparent 70%),
+    var(--bg);
+}
+
+/* — Matériau ————————————————————————————————————————————— */
+.card,
+.tile,
+.notice,
+.glass,
+.ask-bar,
+.skeleton {
+  background: var(--glass-shine), var(--glass-fill);
+  border: 1px solid var(--glass-edge-soft);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.glass { border-radius: var(--r-lg); }
+.card--tap:active,
+.tile.card--tap:active { background: var(--glass-shine), var(--glass-fill-press); }
+.card--flat { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+
+/* Encadrés colorés : le verre garde une teinte, pour rester lisibles. */
+.notice--warn   { background: var(--glass-shine), color-mix(in srgb, var(--warn) 14%, var(--glass-fill)); }
+.notice--danger { background: var(--glass-shine), color-mix(in srgb, var(--down) 14%, var(--glass-fill)); }
+
+/* Contrôles ronds et pilules : même matière, sans ombre portée lourde. */
+.icon-btn,
+.ccy-switch,
+.segmented,
+.field input,
+.field select,
+.field textarea {
+  background: var(--glass-shine), var(--glass-fill);
+  border: 1px solid var(--glass-edge-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .10);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+}
+.icon-btn--plain { background: transparent; border-color: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+.segmented button[aria-selected="true"],
+.tabs button[aria-selected="true"] {
+  background: var(--glass-fill-strong);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .16), 0 2px 10px rgba(0, 0, 0, .18);
+}
+.tabs button[aria-selected="true"] { border: 1px solid var(--glass-edge-soft); }
+
+/* Pastilles et avatars : un voile de verre, sans flou (il y en a beaucoup). */
+.badge,
+.avatar:not(.avatar--dot) {
+  background: var(--glass-fill);
+  box-shadow: inset 0 0 0 1px var(--glass-edge-soft);
+}
+.acct-badge { box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .22), 0 1px 4px rgba(0, 0, 0, .25); }
+
+/* Petites positions repliables : le chevron tourne quand on déplie. */
+.dust > .row { padding-inline: var(--sp-4); }
+.dust > .rows { padding: 0 var(--sp-4) var(--sp-2); }
+.chevron { display: inline-flex; color: var(--text-3); transition: transform var(--dur) var(--ease); }
+.dust [aria-expanded="true"] .chevron { transform: rotate(90deg); }
+.chip-row { margin-bottom: var(--sp-2); }
+
+/* — Feuilles (bottom sheets) ———————————————————————————— */
+.sheet {
+  background: var(--glass-shine), var(--glass-sheet);
+  -webkit-backdrop-filter: blur(34px) saturate(180%);
+  backdrop-filter: blur(34px) saturate(180%);
+  border: 1px solid var(--glass-edge-soft);
+  border-bottom: 0;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, .35), inset 0 1px 0 rgba(255, 255, 255, .14);
+}
+.sheet-scrim { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.toast {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  box-shadow: var(--glass-shadow);
+}
+
+/* — Barre du bas : une pilule de verre flottante, icônes seules ——————— */
+.dock {
+  left: 50%;
+  right: auto;
+  bottom: calc(var(--safe-bottom) + 10px);
+  transform: translateX(-50%);
+  width: min(calc(100% - 32px), 420px);
+  height: 64px;
+  padding: 6px;
+  border-radius: var(--r-pill);
+  border: 1px solid var(--glass-edge);
+  background: var(--glass-shine), var(--glass-dock);
+  -webkit-backdrop-filter: blur(32px) saturate(190%);
+  backdrop-filter: blur(32px) saturate(190%);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .42), inset 0 1px 0 rgba(255, 255, 255, .18);
+  isolation: isolate;
+}
+.dock a {
+  position: relative;
+  z-index: 1;
+  border-radius: var(--r-pill);
+  color: var(--text-2);
+}
+.dock a span { display: none; }                  /* icônes seules */
+.dock a[aria-current="page"] { color: var(--text); }
+.dock a[aria-current="page"] svg { transform: scale(1.08); }
+.dock svg { width: 25px; height: 25px; transition: transform var(--dur) var(--ease-out); }
+.dock a:active svg { transform: scale(.88); }
+
+/* La bulle de l'onglet actif glisse d'une icône à l'autre, avec un léger
+   rebond : c'est le « liquide » du liquid glass. */
+.dock__pill {
+  position: absolute;
+  z-index: 0;
+  top: 6px; bottom: 6px; left: 6px;
+  width: calc((100% - 12px) / 5);
+  border-radius: var(--r-pill);
+  background: var(--glass-fill-press);
+  border: 1px solid var(--glass-edge-soft);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .22), 0 4px 14px rgba(0, 0, 0, .25);
+  transform: translateX(calc(var(--i, 0) * 100%));
+  transition: transform 460ms cubic-bezier(.3, 1.35, .5, 1);
+}
+.dock__pill[hidden] { display: block !important; opacity: 0; }
+
+/* Le contenu s'arrête au-dessus de la pilule. */
+.screen { padding-bottom: calc(64px + var(--safe-bottom) + 10px + var(--sp-8)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .dock__pill { transition: none; }
+}
+
+/* Navigateurs sans backdrop-filter : un remplissage plus opaque suffit. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root { --glass-fill: rgba(40, 44, 50, .92); --glass-dock: rgba(24, 28, 32, .96); --glass-sheet: rgba(20, 22, 26, .98); }
+}
+
+/* Bandeau de démonstration : une pilule discrète, pas un pavé. */
+.demo-pill {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 14px 7px 10px; margin-bottom: var(--sp-5);
+  border-radius: var(--r-pill);
+  font-size: var(--fs-sm); color: var(--text-2);
+  background: var(--glass-shine), var(--glass-fill);
+  border: 1px solid var(--glass-edge-soft);
+  -webkit-backdrop-filter: var(--glass-blur); backdrop-filter: var(--glass-blur);
+}
+.demo-pill svg { width: 16px; height: 16px; color: var(--accent); }
+.demo-pill strong { color: var(--text); font-weight: 600; }
+
+/* Camembert + légende côte à côte */
+.donut-legend { display: grid; grid-template-columns: auto 1fr; gap: var(--sp-5); align-items: center; }
+.donut-legend__list { display: grid; gap: 8px; min-width: 0; }
+.donut-legend__item { display: grid; grid-template-columns: 10px 1fr auto; gap: 10px; align-items: center; text-align: left; font-size: var(--fs-sm); }
+.donut-legend__item i { width: 10px; height: 10px; border-radius: 50%; }
+.donut-legend__label { color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.donut-legend__pct { color: var(--text-2); }
+.donut-legend__value { display: block; color: var(--text-2); font-size: var(--fs-xs); margin-top: 1px; }
+.show-more { width: 100%; margin-top: var(--sp-3); }

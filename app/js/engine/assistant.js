@@ -98,6 +98,33 @@ export const INTENTS = [
     examples: ['Est-ce un bon moment pour acheter du Bitcoin ?'],
   },
   {
+    code: 'cash',
+    priority: 75,
+    patterns: [/\bliquidites?\b/, /\bcash\b/, /\b(sur mes|sur le) comptes?\b/, /\bcompte courant\b/,
+      /\b(disponible|stablecoins?|usdc|usdt)\b/],
+    examples: ['Combien ai-je de liquidités ?'],
+  },
+  {
+    code: 'goals',
+    priority: 75,
+    patterns: [/\bobjectifs?\b/],
+    examples: ['Où en sont mes objectifs ?'],
+  },
+  {
+    code: 'holdings_list',
+    priority: 60,
+    patterns: [/\bmes (positions|cryptos?|actifs|placements|investissements)\b/,
+      /\b(qu.est.ce que|que) (je possede|j.ai)\b/, /\bje possede quoi\b/, /\bmon portefeuille\b/],
+    examples: ['Quelles sont mes positions ?'],
+  },
+  {
+    code: 'overview',
+    priority: 45,
+    patterns: [/\b(bilan|resume|recap|recapitulatif|synthese|vue d.ensemble|situation)\b/,
+      /\bcomment (ca|je|tout) va\b/, /\bfais (moi )?le point\b/, /\bou j.en suis\b/],
+    examples: ['Fais-moi un bilan'],
+  },
+  {
     code: 'net_worth',
     priority: 40,                 // le plus vague : ne gagne qu'à défaut
     patterns: [/\bpatrimoine\b/, /\bnet worth\b/,
@@ -107,7 +134,9 @@ export const INTENTS = [
 ];
 
 export const SUGGESTIONS = [
+  'Fais-moi un bilan',
   'Combien vaut mon patrimoine ?',
+  'Quelles sont mes positions ?',
   'Combien ai-je dépensé en restaurants ce mois-ci ?',
   "Quel est mon taux d'épargne ?",
   'Combien me coûtent mes abonnements ?',
@@ -261,7 +290,7 @@ export function answer({ text, evidence = [], action = null, caveat = null, inte
 export function unknownAnswer(question) {
   return answer({
     intent: null,
-    text: "Je ne sais pas encore répondre à ça. Je reste volontairement limité aux questions dont je peux tirer la réponse de vos données, plutôt que de risquer une réponse inventée.",
+    text: "Je ne sais pas encore calculer ça directement sur votre appareil. Je préfère le dire que risquer une réponse inventée.",
     evidence: [],
     caveat: 'Voici ce que je sais faire :',
     action: { kind: 'suggestions', items: SUGGESTIONS },

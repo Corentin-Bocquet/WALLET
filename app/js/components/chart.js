@@ -398,9 +398,41 @@ export function donutChart(items, { size = 200, thickness = 22, centerLabel = 'T
       },
     },
       h('div.muted', { style: { fontSize: 'var(--fs-sm)' } }, centerLabel),
-      h('div.num.sensitive', { style: { fontSize: '22px', fontWeight: '700' } },
+      h('div.num.sensitive', { style: { fontSize: size < 170 ? '17px' : '22px', fontWeight: '700' } },
         money(total, { currency, compact: true, decimals: 0 })),
     ),
+  );
+}
+
+/**
+ * Camembert compact et sa légende côte à côte : la répartition tient dans
+ * un seul bloc au lieu d'un graphique plein écran suivi d'une liste.
+ * Au-delà de `max` parts, le reste est regroupé en « Autres ».
+ */
+export function donutWithLegend(items, { max = 5, centerLabel = 'Total', onSelect = null, size = 132, showValue = false } = {}) {
+  const data = (items || [])
+    .map((it) => ({ ...it, value: Math.abs(Number(it.value ?? it.total)) }))
+    .filter((it) => Number.isFinite(it.value) && it.value > 0)
+    .sort((a, b) => b.value - a.value);
+  const head = data.slice(0, max);
+  const rest = data.slice(max);
+  if (rest.length) {
+    head.push({ label: 'Autres', value: rest.reduce((a, it) => a + it.value, 0), color: 'var(--neutral)', isRest: true });
+  }
+  const total = head.reduce((a, it) => a + it.value, 0);
+
+  return h('div.donut-legend',
+    donutChart(head, { size, thickness: 16, centerLabel }),
+    h('div.donut-legend__list', head.map((item) => h(onSelect && !item.isRest ? 'button' : 'div', {
+      class: 'donut-legend__item',
+      type: onSelect && !item.isRest ? 'button' : null,
+      onclick: onSelect && !item.isRest ? () => onSelect(item) : null,
+    },
+      h('i', { style: { background: item.color || 'var(--accent)' } }),
+      h('span.donut-legend__label', item.label,
+        showValue ? h('span.donut-legend__value.num.sensitive', money(item.value, { decimals: 0 })) : null),
+      h('span.donut-legend__pct.num', `${Math.round((item.value / total) * 100)} %`),
+    ))),
   );
 }
 

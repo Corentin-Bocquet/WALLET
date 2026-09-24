@@ -7,7 +7,9 @@
 import { SupabaseClient } from 'jsr:@supabase/supabase-js@2';
 
 const FIAT = new Set(['EUR', 'USD', 'GBP', 'CHF', 'JPY', 'CAD', 'AUD']);
-const STABLE = new Set(['USDT', 'USDC', 'DAI', 'EURT', 'EURC', 'TUSD', 'USDG']);
+const STABLE = new Set([
+  'USDT', 'USDC', 'DAI', 'TUSD', 'USDG', 'PYUSD', 'FDUSD', 'USDE', 'EURC', 'EURT', 'EUROC', 'EURI',
+]);
 
 export interface RawBalance { symbol: string; quantity: number }
 
@@ -24,8 +26,14 @@ export async function writeHoldings(
   service: SupabaseClient,
   userId: string,
   accountId: string,
-  balances: RawBalance[],
+  rawBalances: RawBalance[],
 ) {
+  // Un même symbole ne doit apparaître qu'une fois : voir krakenBalances().
+  // Filet de sécurité pour tout futur connecteur qui oublierait d'additionner.
+  const merged = new Map<string, number>();
+  for (const b of rawBalances) merged.set(b.symbol, (merged.get(b.symbol) ?? 0) + b.quantity);
+  const balances: RawBalance[] = [...merged.entries()].map(([symbol, quantity]) => ({ symbol, quantity }));
+
   const symbols = [...new Set(balances.map((b) => b.symbol))];
 
   const { data: assets } = await service.from('assets')
@@ -83,7 +91,10 @@ export async function writeHoldings(
   }
 
   if (rows.length) {
-    await service.from('holdings').upsert(rows, { onConflict: 'account_id,asset_id' });
+    // Une écriture refusée doit faire échouer la synchronisation : ignorée,
+    // elle laissait les anciennes quantités affichées comme si tout allait bien.
+    const { error } = await service.from('holdings').upsert(rows, { onConflict: 'account_id,asset_id' });
+    if (error) throw new Error(`Positions non enregistrées : ${error.message}`);
   }
 
   // Les positions synchronisées absentes du dernier relevé sont mises à zéro
@@ -91,8 +102,10 @@ export async function writeHoldings(
   const seen = new Set(rows.map((r) => r.asset_id));
   const stale = existingRows.filter((h) => h.source === 'sync' && !seen.has(h.asset_id));
   if (stale.length) {
-    await service.from('holdings').update({ quantity: 0, synced_at: new Date().toISOString() })
+    const { error } = await service.from('holdings')
+      .update({ quantity: 0, synced_at: new Date().toISOString() })
       .in('id', stale.map((h) => h.id));
+    if (error) throw new Error(`Positions vendues non remises à zéro : ${error.message}`);
   }
 
   return { written: rows.length, cashByCurrency, unknown };

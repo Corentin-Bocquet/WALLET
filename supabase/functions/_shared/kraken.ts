@@ -122,13 +122,20 @@ export async function krakenReadOnly(keys: KrakenKeys): Promise<boolean> {
 export async function krakenBalances(keys: KrakenKeys) {
   const result = await krakenPrivate(keys, 'Balance') as Record<string, string>;
 
-  const balances: Array<{ symbol: string; quantity: number }> = [];
+  // Kraken sépare un même actif en plusieurs lignes : « SOL » (disponible),
+  // « SOL.F » (Earn flexible), « DOT.S » (jalonné)… Une fois normalisées, ces
+  // lignes portent le même symbole et DOIVENT être additionnées. Sans cela,
+  // l'écriture groupée recevait deux fois le même actif, la base la refusait
+  // en bloc, et plus aucune position Kraken n'était mise à jour : un actif
+  // vendu restait compté au patrimoine et suivait son cours.
+  const totals = new Map<string, number>();
   for (const [rawSymbol, rawAmount] of Object.entries(result)) {
     const quantity = Number(rawAmount);
     if (!Number.isFinite(quantity) || quantity <= 0) continue;
-    balances.push({ symbol: normalizeSymbol(rawSymbol), quantity });
+    const symbol = normalizeSymbol(rawSymbol);
+    totals.set(symbol, (totals.get(symbol) ?? 0) + quantity);
   }
-  return balances;
+  return [...totals.entries()].map(([symbol, quantity]) => ({ symbol, quantity }));
 }
 
 /**

@@ -174,8 +174,11 @@ await page.locator('.sheet input[type="text"]').fill('Quelle est la capitale de 
 await page.locator('.sheet button[type="submit"]').click();
 await page.waitForTimeout(1200);
 const dontKnow = await page.locator('.sheet .card').last().textContent();
-assert.ok(/Je ne sais pas/i.test(dontKnow), 'devrait admettre son ignorance');
-step('question hors sujet : « Je ne sais pas » ✓');
+// Hors sujet : l'assistant dit qu'il ne peut pas répondre (jamais de réponse
+// inventée), puis donne quand même le bilan chiffré plutôt qu'une impasse.
+assert.ok(/pas branchée|pas pu répondre/i.test(dontKnow), 'devrait dire qu’il ne peut pas répondre');
+assert.ok(/€/.test(dontKnow), 'devrait proposer le bilan chiffré en repli');
+step('question hors sujet : aveu + bilan chiffré ✓');
 await page.keyboard.press('Escape');
 await page.waitForTimeout(400);
 
