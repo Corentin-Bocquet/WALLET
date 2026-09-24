@@ -254,7 +254,7 @@ function editAlert(alert, onChange) {
 // `icon` est un nom de glyphe pour l'affichage ; `emoji` est le texte
 // enregistré en base. Les deux ne sont pas interchangeables : un glyphe est un
 // nœud SVG, qui devenait « [object SVGSVGElement] » une fois écrit en texte.
-const GOAL_KINDS = [
+export const GOAL_KINDS = [
   { key: 'net_worth', label: 'Patrimoine total', icon: 'chart', emoji: '📈', unit: '€' },
   { key: 'savings_rate', label: 'Taux d’épargne mensuel', icon: 'bank', emoji: '🏦', unit: '%' },
   { key: 'cash_buffer', label: 'Épargne de précaution', icon: 'buoy', emoji: '🛟', unit: '€' },
@@ -262,7 +262,7 @@ const GOAL_KINDS = [
 ];
 
 /** Un emoji enregistré n'est gardé que s'il est lisible (anciennes saisies corrompues). */
-const readableEmoji = (value) =>
+export const readableEmoji = (value) =>
   (typeof value === 'string' && value && !value.startsWith('[object') ? value : null);
 
 export async function goalsScreen() {
@@ -351,7 +351,7 @@ export async function goalsScreen() {
   return screen;
 }
 
-function currentValue(goal, { netWorth, summary, holdings }) {
+export function currentValue(goal, { netWorth, summary, holdings }) {
   switch (goal.kind) {
     case 'net_worth': return netWorth?.total ?? NaN;
     case 'cash_buffer': return netWorth?.cash ?? NaN;
@@ -359,14 +359,16 @@ function currentValue(goal, { netWorth, summary, holdings }) {
       return summary?.savings_rate === null || summary?.savings_rate === undefined
         ? NaN : Number(summary.savings_rate);
     case 'asset_quantity': {
-      const holding = holdings.find((hold) => hold.asset_id === goal.asset_id);
-      return holding ? Number(holding.quantity) : NaN;
+      // Un même actif peut être détenu sur plusieurs comptes (SOL sur Kraken
+      // ET sur OKX) : l'objectif porte sur la quantité totale.
+      const parts = holdings.filter((hold) => hold.asset_id === goal.asset_id);
+      return parts.length ? parts.reduce((sum, hold) => sum + (Number(hold.quantity) || 0), 0) : NaN;
     }
     default: return NaN;
   }
 }
 
-function formatGoal(value, kind) {
+export function formatGoal(value, kind) {
   if (!Number.isFinite(value)) return '—';
   if (kind === 'savings_rate') return `${Math.round(value)} %`;
   if (kind === 'asset_quantity') return String(Math.round(value * 1e6) / 1e6);

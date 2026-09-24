@@ -15,7 +15,7 @@
  * Rien n'est mis en cache pour les requêtes authentifiées, même en lecture.
  */
 
-const VERSION = 'wallet-v1.1.0';
+const VERSION = 'wallet-v1.1.1';
 const SHELL = `${VERSION}-shell`;
 
 const SHELL_ASSETS = [
@@ -103,8 +103,27 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // La configuration du serveur passe par le réseau d'abord : servie depuis
+  // le cache, un changement de projet Supabase n'était pris en compte qu'au
+  // lancement suivant. Le cache ne sert que hors connexion.
+  if (url.pathname.endsWith('/config.local.js')) {
+    event.respondWith(networkFirst(request));
+    return;
+  }
+
   event.respondWith(staleWhileRevalidate(request));
 });
+
+async function networkFirst(request) {
+  const cache = await caches.open(SHELL);
+  try {
+    const response = await fetch(request);
+    if (response.ok) cache.put(request, response.clone());
+    return response;
+  } catch {
+    return (await cache.match(request)) ?? new Response('', { status: 504 });
+  }
+}
 
 function isDataRequest(url) {
   return url.hostname.endsWith('.supabase.co')

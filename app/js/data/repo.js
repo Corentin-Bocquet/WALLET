@@ -372,6 +372,22 @@ export async function monthlySummary(month) {
 }
 
 /**
+ * Revenu habituel : moyenne des revenus des trois derniers mois complets qui
+ * en ont eu. Sert d'ESTIMATION quand le salaire du mois n'est pas encore
+ * importé ; l'écran l'affiche toujours comme estimé, jamais comme un fait.
+ * null si aucun mois récent n'a de revenu connu.
+ */
+export async function expectedMonthlyIncome() {
+  const now = new Date();
+  const months = [1, 2, 3].map((back) =>
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - back, 1)).toISOString().slice(0, 10));
+  const summaries = await Promise.all(months.map((m) => monthlySummary(m).catch(() => null)));
+  const incomes = summaries.map((sm) => Number(sm?.income)).filter((v) => Number.isFinite(v) && v > 0);
+  if (!incomes.length) return null;
+  return round2(incomes.reduce((a, b) => a + b, 0) / incomes.length);
+}
+
+/**
  * Même synthèse, sur une période quelconque. Sert à comparer le mois en cours
  * au MÊME nombre de jours du mois précédent : comparer 24 jours de septembre à
  * 31 jours d'août affichait une baisse de dépenses qui n'existait pas.

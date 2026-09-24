@@ -30,7 +30,13 @@ function loadPersisted() {
   const empty = {
     memory: [], ignoreMemory: [], rules: [], corrections: [],
     overrides: {}, statuses: {}, settings: {}, watchlist: ['asset-btc', 'asset-eth', 'asset-sol'],
-    scenarios: null, altRatios: null, alerts: [], goals: [], scoreModel: null,
+    scenarios: null, altRatios: null, alerts: [], scoreModel: null,
+    // Un objectif d'exemple, pour que la démonstration montre la jauge
+    // de progression de l'accueil.
+    goals: [{
+      id: 'goal-demo-buffer', label: 'Épargne de précaution', kind: 'cash_buffer',
+      target_value: 15000, target_date: null, emoji: '🛟', is_active: true,
+    }],
     assistantLog: [], dismissedInsights: [],
   };
   try {

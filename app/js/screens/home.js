@@ -79,7 +79,12 @@ export async function homeScreen() {
     what: 'la répartition',
   })));
 
-  /* — 4. Ce que WALLET a remarqué ————————————————— */
+  /* — 4. Objectifs : visibles ici, pas seulement au fond du profil ———— */
+  const goals = h('div');
+  screen.append(goals);
+  renderGoals(goals);
+
+  /* — 5. Ce que WALLET a remarqué ————————————————— */
   const insights = h('div');
   screen.append(section('Ce que WALLET a remarqué', {}, insights));
   mount(insights, loadingRows(2));
@@ -217,15 +222,16 @@ async function loadMonth() {
   const previousEnd = new Date(Date.UTC(y, m - 1,
     Math.min(now.getUTCDate(), new Date(Date.UTC(y, m, 0)).getUTCDate())));
 
-  const [current, previous, lastKnown] = await Promise.all([
+  const [current, previous, lastKnown, expectedIncome] = await Promise.all([
     repo.monthlySummary(),
     repo.summarizeRange(iso(previousStart), iso(previousEnd)).catch(() => null),
     repo.lastTransactionDate?.().catch(() => null) ?? null,
+    repo.expectedMonthlyIncome().catch(() => null),
   ]);
-  return { current, previous, lastKnown };
+  return { current, previous, lastKnown, expectedIncome };
 }
 
-function renderMonth({ current, previous, lastKnown }) {
+function renderMonth({ current, previous, lastKnown, expectedIncome }) {
   if (!current) return emptyState({ emoji: glyph('receipt'), title: 'Aucune donnée bancaire' });
 
   // Un mois sans AUCUNE opération n'est pas un mois à zéro euro : c'est un
@@ -258,6 +264,11 @@ function renderMonth({ current, previous, lastKnown }) {
   const rate = current.savings_rate === null ? null : Number(current.savings_rate);
   const previousExpense = previous ? Number(previous.expense) : null;
   const expenseChange = previousExpense ? ((expense / previousExpense) - 1) * 100 : null;
+  // Salaire du mois pas encore importé : plutôt qu'un « — », une estimation
+  // sur le revenu habituel, affichée comme telle (≈ et « estimé »).
+  const estimatedRate = rate === null && Number(expectedIncome) > 0
+    ? ((Number(expectedIncome) + income - expense) / (Number(expectedIncome) + income)) * 100
+    : null;
 
   return h('div.card',
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' } },
@@ -274,13 +285,17 @@ function renderMonth({ current, previous, lastKnown }) {
         h('div.eyebrow', { style: { justifyContent: 'flex-end' } },
           'Épargne', explainChip('savings_rate', { label: "taux d'épargne" })),
         h('div.num.sensitive', { style: { fontSize: '28px', fontWeight: '700', marginTop: '4px' } },
-          rate === null
-            ? h('span.unknown', '—')
-            : `${Math.round(rate)} %`),
+          rate !== null
+            ? `${Math.round(rate)} %`
+            : estimatedRate !== null
+              ? h('span', { style: { color: 'var(--text-2)' } }, `≈ ${Math.round(estimatedRate)} %`)
+              : h('span.unknown', '—')),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
-          rate === null
-            ? 'revenus inconnus'
-            : money(Number(current.net_savings), { decimals: 0 })),
+          rate !== null
+            ? money(Number(current.net_savings), { decimals: 0 })
+            : estimatedRate !== null
+              ? `estimé · revenu ≈ ${money(expectedIncome, { decimals: 0 })}`
+              : 'revenus inconnus'),
       ),
     ),
 
@@ -309,6 +324,67 @@ function renderMonth({ current, previous, lastKnown }) {
       ),
     ) : null,
   );
+}
+
+/* ------------------------------------------------------------------ */
+/* Objectifs                                                           */
+/* ------------------------------------------------------------------ */
+
+async function renderGoals(host) {
+  try {
+    const goals = (await repo.listGoals()).filter((g) => g.is_active !== false);
+    if (!goals.length) {
+      mount(host, section('Mes objectifs', {},
+        h('button.card.card--tap', {
+          type: 'button', 'data-sound': 'select',
+          style: { width: '100%', textAlign: 'left', display: 'flex', gap: '12px', alignItems: 'center' },
+          onclick: () => navigate('/profil/objectifs'),
+        },
+          h('span.lead-icon', { style: { color: 'var(--accent)' } }, glyph('target')),
+          h('div', { style: { flex: '1' } },
+            h('div', { style: { fontWeight: '600' } }, 'Fixe-toi un objectif'),
+            h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
+              'Patrimoine, épargne de précaution, quantité de BTC…')),
+          h('span', { style: { color: 'var(--text-3)' } }, '›'))));
+      return;
+    }
+
+    const [{ currentValue, formatGoal, GOAL_KINDS, readableEmoji }, netWorth, summary, holdings] =
+      await Promise.all([
+        import('./alerts.js'),
+        repo.getNetWorth().catch(() => null),
+        repo.monthlySummary().catch(() => null),
+        repo.getHoldings().catch(() => []),
+      ]);
+
+    mount(host, section('Mes objectifs', {
+      action: seeAll('Gérer', () => navigate('/profil/objectifs')),
+    }, h('div', { style: { display: 'grid', gap: '12px' } },
+      goals.slice(0, 3).map((goal) => {
+        const current = currentValue(goal, { netWorth, summary, holdings });
+        const target = Number(goal.target_value);
+        const known = Number.isFinite(current) && target > 0;
+        const progress = known ? Math.max(0, Math.min(100, (current / target) * 100)) : null;
+        const kind = GOAL_KINDS.find((k) => k.key === goal.kind);
+        return h('button.card.card--tap', {
+          type: 'button', 'data-sound': 'select',
+          style: { width: '100%', textAlign: 'left' },
+          onclick: () => navigate('/profil/objectifs'),
+        },
+          h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '12px', alignItems: 'baseline' } },
+            h('div.eyebrow', readableEmoji(goal.emoji) ?? glyph(kind?.icon ?? 'target', 16), ' ', goal.label),
+            h('div.num', { style: { fontWeight: '700', color: progress >= 100 ? 'var(--accent)' : 'var(--text)' } },
+              progress === null ? '—' : `${Math.round(progress)} %`),
+          ),
+          h('div.meter', { style: { marginTop: '10px', height: '8px' } },
+            h('div.meter__fill', { style: { width: `${progress ?? 0}%`, background: 'var(--accent)' } })),
+          h('div.muted.num.sensitive', { style: { fontSize: 'var(--fs-sm)', marginTop: '8px' } },
+            `${formatGoal(current, goal.kind)} sur ${formatGoal(target, goal.kind)}`),
+        );
+      }))));
+  } catch {
+    mount(host, h('div'));   // un objectif illisible ne doit pas bloquer l'accueil
+  }
 }
 
 /* ------------------------------------------------------------------ */

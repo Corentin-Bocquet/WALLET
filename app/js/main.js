@@ -109,6 +109,34 @@ async function boot() {
   registerServiceWorker();
   watchConnection();
   watchAuth();
+  autoSyncExchanges();
+}
+
+/* — Synchronisation à l'ouverture ——————————————————————
+   Plutôt que d'attendre un geste sur le bouton du portefeuille, les
+   exchanges connectés sont relancés en arrière-plan quand leur dernière
+   synchronisation date de plus d'une heure. Le serveur limite déjà la
+   fréquence ; un échec ici reste silencieux, le bouton manuel dit tout. */
+
+const AUTO_SYNC_AFTER_MS = 60 * 60 * 1000;
+
+async function autoSyncExchanges() {
+  if (repo.isDemoMode() || !navigator.onLine) return;
+  try {
+    const state = await repo.getSyncState();
+    const stale = ['kraken', 'okx'].some((provider) => {
+      const last = state[provider]?.last_success;
+      // Aucune ligne = jamais synchronisé : syncExchanges() vérifie de lui-même
+      // qu'une clé existe, et ne fait rien sinon.
+      return !last || Date.now() - new Date(last).getTime() > AUTO_SYNC_AFTER_MS;
+    });
+    if (!stale) return;
+
+    const results = await repo.syncExchanges();
+    if (results.some((r) => r.ok)) refresh();
+  } catch (error) {
+    console.warn('[wallet] synchronisation automatique impossible', error);
+  }
 }
 
 /* — Préférences ————————————————————————————————————— */
