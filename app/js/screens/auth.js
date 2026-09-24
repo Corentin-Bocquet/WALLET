@@ -20,7 +20,7 @@ export function authScreen({ onDemo } = {}) {
   const screen = h('main.screen', { style: { display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: '100dvh' } });
 
   const brand = h('div', { style: { textAlign: 'center', marginBottom: '40px' } },
-    h('div', { style: { fontSize: '52px', marginBottom: '12px' } }, '◈'),
+    h('img', { src: './icons/icon-180.png', alt: '', width: 72, height: 72, style: { width: '72px', height: '72px', borderRadius: '18px', margin: '0 auto 14px' } }),
     h('h1', { style: { fontSize: '30px', fontWeight: '700', letterSpacing: '-.03em' } }, 'WALLET'),
     h('p.muted', { style: { marginTop: '6px' } }, 'Votre patrimoine, simplement.'),
   );
