@@ -30,11 +30,13 @@ Deno.serve(async (request) => {
     const question = String(body.question ?? '').trim().slice(0, MAX_QUESTION);
     if (!question) throw new HttpError('Question vide.', 400);
 
-    const context = await buildContext(service, user.id);
+    const context = await buildContext(service, user.id, sanitizeClientContext(body.context));
+    const history = sanitizeHistory(body.history);
 
     const answer = await ask(
       `Contexte chiffré (source unique de vérité) :\n${context.text}\n\n`
-      + `Question : ${question}`,
+      + (history ? `Échanges précédents de cette conversation (du plus ancien au plus récent) :\n${history}\n\n` : '')
+      + `Nouvelle question : ${question}`,
       {
         system:
           'Tu es l\'assistant de WALLET, une application de patrimoine personnel. '
@@ -43,7 +45,10 @@ Deno.serve(async (request) => {
           + 'fourni. Tu n\'inventes ni un montant, ni une date, ni une catégorie. Si le '
           + 'contexte ne permet pas de répondre, tu le dis en une phrase et tu indiques '
           + 'ce qu\'il faudrait importer ou connecter. Tu ne donnes jamais de conseil '
-          + 'd\'investissement personnalisé : tu décris ce que montrent les chiffres.',
+          + 'd\'investissement personnalisé : tu décris ce que montrent les chiffres. '
+          + 'La question peut être une relance de l\'échange précédent (« et en dollars ? », '
+          + '« et le mois dernier ? ») : réponds-y dans ce contexte. Pour convertir une '
+          + 'devise, utilise les taux fournis et indique le taux employé.',
         maxTokens: 800,
         temperature: 0.2,
       },
@@ -69,16 +74,81 @@ Deno.serve(async (request) => {
   }
 });
 
+type ClientContext = Record<string, number | null | Record<string, number>>;
+
+/** Les totaux envoyés par l'application : des nombres, rien d'autre. */
+function sanitizeClientContext(raw: unknown): ClientContext | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const out: ClientContext = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>).slice(0, 20)) {
+    if (typeof value === 'number' && Number.isFinite(value)) out[key.slice(0, 40)] = value;
+    else if (value && typeof value === 'object') {
+      const nested: Record<string, number> = {};
+      for (const [k, v] of Object.entries(value as Record<string, unknown>).slice(0, 40)) {
+        if (typeof v === 'number' && Number.isFinite(v)) nested[k.slice(0, 12)] = v;
+      }
+      out[key.slice(0, 40)] = nested;
+    }
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Les derniers échanges, bornés en nombre et en longueur. */
+function sanitizeHistory(raw: unknown): string {
+  if (!Array.isArray(raw)) return '';
+  return raw.slice(-8)
+    .filter((m) => m && typeof m === 'object' && typeof (m as { content?: unknown }).content === 'string')
+    .map((m) => {
+      const { role, content } = m as { role?: string; content: string };
+      return `${role === 'assistant' ? 'Assistant' : 'Utilisateur'} : ${content.slice(0, 600)}`;
+    })
+    .join('\n');
+}
+
 /** Agrégats seulement : jamais la liste des opérations. */
-async function buildContext(service: ReturnType<typeof serviceClient>, userId: string) {
+async function buildContext(
+  service: ReturnType<typeof serviceClient>, userId: string, client: ClientContext | null,
+) {
   const today = new Date().toISOString().slice(0, 10);
   const evidence: Array<{ label: string; value: string }> = [];
   const lines: string[] = [`Date du jour : ${today}`];
+
+  // Les totaux calculés par l'application : ce sont les chiffres affichés à
+  // l'écran, toujours présents même si aucun instantané quotidien n'existe.
+  if (client) {
+    lines.push(`Totaux affichés dans l'application (EUR) : ${JSON.stringify(client)}`);
+    if (typeof client.net_worth === 'number') {
+      evidence.push({ label: 'Patrimoine total', value: `${client.net_worth} EUR` });
+    }
+  }
+
+  /* Taux de change (base EUR) */
+  const { data: fx } = await service.from('fx_rates')
+    .select('quote, rate, day').eq('base', 'EUR').order('day', { ascending: false }).limit(20);
+  const rates = new Map<string, number>();
+  for (const r of fx ?? []) if (!rates.has(r.quote)) rates.set(r.quote, Number(r.rate));
+  if (rates.size) {
+    lines.push('Taux de change depuis l\'euro : ' + [...rates.entries()].map(([q, r]) => `1 EUR = ${r} ${q}`).join(' · '));
+  }
 
   /* Patrimoine */
   const { data: snapshot } = await service.from('portfolio_snapshots')
     .select('day, total_value, crypto_value, cash_value, equity_value, is_partial')
     .eq('user_id', userId).order('day', { ascending: false }).limit(1).maybeSingle();
+
+  if (!snapshot && !client) {
+    // Aucun instantané ni total fourni : on valorise les positions en direct.
+    const { data: live } = await service.from('holdings')
+      .select('quantity, asset_id, assets(symbol)').eq('user_id', userId).gt('quantity', 0);
+    const ids = [...new Set((live ?? []).map((h) => h.asset_id))];
+    const { data: quotes } = ids.length
+      ? await service.from('asset_quotes').select('asset_id, price').in('asset_id', ids)
+      : { data: [] };
+    const price = new Map((quotes ?? []).map((q: { asset_id: string; price: number }) => [q.asset_id, Number(q.price)]));
+    const total = (live ?? []).reduce((sum: number, h: { quantity: unknown; asset_id: string }) =>
+      sum + (Number(h.quantity) || 0) * Number(price.get(h.asset_id) ?? 0), 0);
+    if (total > 0) lines.push(`Valeur actuelle des positions crypto : ${Math.round(total)} EUR`);
+  }
 
   if (snapshot) {
     lines.push(

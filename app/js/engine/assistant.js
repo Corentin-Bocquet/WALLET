@@ -144,6 +144,21 @@ export const SUGGESTIONS = [
   'Que vaut mon portefeuille si BTC atteint 200 000 € ?',
 ];
 
+/**
+ * Relance de devise : « et en dollars ? », « en $ », « même chose en euros ».
+ * Renvoie le code ISO demandé, ou null. Seulement pour une question courte :
+ * « combien j'ai dépensé en dollars sur Amazon » n'est pas une relance.
+ */
+export function detectCurrencySwitch(question) {
+  const q = normalizeQuestion(question).replace(/[?!.]/g, ' ');
+  if (q.split(/\s+/).filter(Boolean).length > 7) return null;
+  if (/(\bdollars?\b|\busd\b|\$)/.test(q)) return 'USD';
+  if (/(\beuros?\b|\beur\b|€)/.test(q)) return 'EUR';
+  if (/(\blivres?\b|\bgbp\b|£)/.test(q)) return 'GBP';
+  if (/(\bfrancs? suisses?\b|\bchf\b)/.test(q)) return 'CHF';
+  return null;
+}
+
 /* — Reconnaissance ————————————————————————————————— */
 
 export function normalizeQuestion(text) {

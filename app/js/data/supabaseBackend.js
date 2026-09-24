@@ -191,9 +191,9 @@ export const supabaseBackend = {
   },
 
   /** Taux de change du jour, base euro : { USD: 1.1669 }. */
-  async askAssistant(question) {
+  async askAssistant(question, { history = [], context = null } = {}) {
     const sb = await getClient();
-    return invokeFunction(sb, 'ai-assistant', { question }, 'Assistant indisponible.');
+    return invokeFunction(sb, 'ai-assistant', { question, history, context }, 'Assistant indisponible.');
   },
 
   async categorizeWithAI() {

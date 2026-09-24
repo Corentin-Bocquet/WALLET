@@ -39,6 +39,8 @@ const listeners = new Set();
 const notify = () => listeners.forEach((fn) => { try { fn(current); } catch { /* rien */ } });
 
 export const displayCurrency = () => current;
+/** Copie des taux connus depuis l'euro (pour le contexte de l'assistant). */
+export const getRates = () => ({ ...rates });
 export const symbolOf = (code) => SYMBOLS[code] ?? code;
 
 /** Vrai si l'on sait convertir vers cette devise. */
