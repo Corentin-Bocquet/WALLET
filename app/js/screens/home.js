@@ -127,7 +127,7 @@ async function renderHero(host) {
           explain: 'net_worth',
           change,
           changePct,
-          changeLabel: RANGES.find((r) => r.key === days)?.label,
+          changeLabel: `sur ${RANGES.find((r) => r.key === days)?.label}`,
         }),
       ),
 
@@ -160,10 +160,12 @@ async function renderHero(host) {
       ),
 
       // Décomposition : trois tuiles, pas un tableau (§5)
-      h('div.hscroll', { style: { marginTop: '20px' } },
-        splitTile('Crypto', netWorth.crypto, '₿', () => navigate('/portefeuille')),
-        splitTile('Liquidités', netWorth.cash, glyph('cash'), () => navigate('/portefeuille')),
-        netWorth.equity > 0 ? splitTile('Actions', netWorth.equity, glyph('trendUp'), () => navigate('/portefeuille')) : null,
+      // Tuiles sur toute la largeur : deux tuiles de 132 px laissaient un
+      // tiers de l'écran vide à droite.
+      h('div.split-grid', { style: { marginTop: '20px' } },
+        splitTile('Crypto', netWorth.crypto, glyph('coin'), netWorth.total),
+        splitTile('Liquidités', netWorth.cash, glyph('cash'), netWorth.total),
+        netWorth.equity > 0 ? splitTile('Actions', netWorth.equity, glyph('trendUp'), netWorth.total) : null,
       ),
     );
   };
@@ -183,14 +185,15 @@ async function renderHero(host) {
 let swipeFrom = null;
 
 
-function splitTile(label, value, emoji, onClick) {
+function splitTile(label, value, emoji, total) {
+  const share = Number(total) > 0 && Number.isFinite(Number(value))
+    ? Math.round((Number(value) / Number(total)) * 100) : null;
   return h('button.tile.card--tap', {
-    type: 'button', 'data-sound': 'select', onclick: onClick,
-    style: { minWidth: '132px' },
+    type: 'button', 'data-sound': 'select', onclick: () => navigate('/portefeuille'),
   },
-    h('div.tile__label', label),
-    h('div', { style: { fontSize: '22px' } }, emoji),
+    h('div.tile__label', emoji, label),
     h('div.tile__value.sensitive', money(value, { compact: true, decimals: 0 })),
+    share !== null ? h('div.muted-2', { style: { fontSize: 'var(--fs-xs)' } }, `${share} % du total`) : null,
   );
 }
 
@@ -200,11 +203,18 @@ function splitTile(label, value, emoji, onClick) {
 
 async function loadMonth() {
   const now = new Date();
-  const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
-    .toISOString().slice(0, 10);
+  const y = now.getUTCFullYear();
+  const m = now.getUTCMonth();
+  const iso = (d) => d.toISOString().slice(0, 10);
+  const previousStart = new Date(Date.UTC(y, m - 1, 1));
+  // Même nombre de jours que le mois en cours, borné à la fin du mois
+  // précédent (le 31 mars se compare au 28 février, pas au 3 mars).
+  const previousEnd = new Date(Date.UTC(y, m - 1,
+    Math.min(now.getUTCDate(), new Date(Date.UTC(y, m, 0)).getUTCDate())));
+
   const [current, previous, lastKnown] = await Promise.all([
     repo.monthlySummary(),
-    repo.monthlySummary(previousMonth),
+    repo.summarizeRange(iso(previousStart), iso(previousEnd)).catch(() => null),
     repo.lastTransactionDate?.().catch(() => null) ?? null,
   ]);
   return { current, previous, lastKnown };
@@ -216,7 +226,7 @@ function renderMonth({ current, previous, lastKnown }) {
   // Un mois sans AUCUNE opération n'est pas un mois à zéro euro : c'est un
   // mois qu'on ne connaît pas. Afficher « 0 € » et « -100 % » donnerait un
   // chiffre faux avec assurance (§46).
-  const operations = Number(current.count ?? current.operations ?? 0);
+  const operations = Number(current.tx_count ?? current.count ?? current.operations ?? 0);
   const hasData = operations > 0 || Number(current.expense) !== 0 || Number(current.income) !== 0;
 
   if (!hasData) {
@@ -247,12 +257,12 @@ function renderMonth({ current, previous, lastKnown }) {
   return h('div.card',
     h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' } },
       h('div',
-        h('div.eyebrow', '💳 Dépenses'),
+        h('div.eyebrow', glyph('card', 16), ' Dépenses'),
         h('div.num.sensitive', { style: { fontSize: '28px', fontWeight: '700', marginTop: '4px' } },
           money(expense, { decimals: 0 })),
         Number.isFinite(expenseChange)
           ? h('div.num', { class: trendClass(-expenseChange), style: { fontSize: 'var(--fs-sm)', fontWeight: '600' } },
-              `${pct(expenseChange)} vs mois dernier`)
+              `${pct(expenseChange, { decimals: 0 })} vs même période`)
           : h('div.muted-2', { style: { fontSize: 'var(--fs-sm)' } }, 'Pas de mois précédent à comparer'),
       ),
       h('div', { style: { textAlign: 'right' } },
@@ -273,7 +283,7 @@ function renderMonth({ current, previous, lastKnown }) {
       style: { marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--hairline)',
         display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
     },
-      h('span.muted', { style: { fontSize: 'var(--fs-sm)' } }, '📊 Investi ce mois-ci'),
+      h('span.muted', { style: { fontSize: 'var(--fs-sm)', display: 'inline-flex', alignItems: 'center', gap: '6px' } }, glyph('chart', 16), 'Investi ce mois-ci'),
       h('span.num.sensitive', { style: { fontWeight: '600' } }, money(invested, { decimals: 0 })),
     ) : null,
 
@@ -334,7 +344,7 @@ async function renderInsights(host) {
       style: { textAlign: 'left', width: '100%' },
       onclick: () => navigate('/banque/recurrent'),
     },
-      h('div.eyebrow', '🔄 Paiements récurrents'),
+      h('div.eyebrow', glyph('refresh', 16), ' Paiements récurrents'),
       h('div', { style: { marginTop: '6px' } },
         h('span.num.sensitive', { style: { fontSize: '22px', fontWeight: '700' } },
           money(monthlyCost, { decimals: 0 })),
@@ -357,6 +367,10 @@ async function renderInsights(host) {
   mount(host, h('div', { style: { display: 'grid', gap: '12px' } }, cards));
 }
 
+const TONE_COLOR = {
+  warning: 'var(--warn)', danger: 'var(--down)', success: 'var(--up)', info: 'var(--info)',
+};
+
 function insightCard(insight) {
   const tone = { warning: glyph('alert'), danger: glyph('dot'), success: glyph('checkCircle'), info: glyph('bulb') }[insight.severity] || glyph('bulb');
 
@@ -366,7 +380,7 @@ function insightCard(insight) {
     onclick: () => showInsight(insight),
   },
     h('div', { style: { display: 'flex', gap: '12px', alignItems: 'flex-start' } },
-      h('span', { style: { fontSize: '20px' } }, tone),
+      h('span.lead-icon', { style: { color: TONE_COLOR[insight.severity] ?? 'var(--text-2)' } }, tone),
       h('div', { style: { minWidth: 0 } },
         h('div', { style: { fontWeight: '600' } }, insight.title),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '2px' } }, insight.body),

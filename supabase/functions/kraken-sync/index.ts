@@ -8,7 +8,7 @@ import {
 } from '../_shared/http.ts';
 import { decryptSecret } from '../_shared/crypto.ts';
 import { krakenBalances, krakenTrades } from '../_shared/kraken.ts';
-import { writeHoldings } from '../_shared/sync.ts';
+import { writeHoldings, quoteCurrency, latestEurRates, priceInEur } from '../_shared/sync.ts';
 
 const MIN_INTERVAL_SECONDS = 60;      // Kraken tolère bien plus, on reste sobre
 
@@ -112,19 +112,26 @@ async function importTrades(
 
   const { data: assets } = await service.from('assets').select('id, symbol');
   const bySymbol = new Map((assets ?? []).map((a) => [a.symbol, a.id]));
+  const rates = await latestEurRates(service);
 
   const rows = trades.map((trade) => {
-    const base = String(trade.pair ?? '').replace(/(EUR|USD|USDT|ZEUR|ZUSD)$/i, '');
+    const base = String(trade.pair ?? '').replace(/(ZEUR|ZUSD|USDT|USDC|EUR|USD)$/i, '');
     const assetId = bySymbol.get(normalizeBase(base));
     if (!assetId) return null;
+    // Le prix est stocké en euros : c'est la devise de tout l'historique
+    // auquel il sera comparé. Une devise sans taux connu écarte la ligne
+    // plutôt que de l'enregistrer avec un prix faux.
+    const price = priceInEur(trade.price, quoteCurrency(String(trade.pair ?? '')), rates);
+    if (price === null) return null;
+    const fee = priceInEur(trade.fee, quoteCurrency(String(trade.pair ?? '')), rates);
     return {
       user_id: userId,
       account_id: accountId,
       asset_id: assetId,
       side: trade.side,
       quantity: trade.quantity,
-      price: trade.price,
-      fee: trade.fee,
+      price,
+      fee,
       currency: 'EUR',
       executed_at: trade.executed_at,
       external_id: trade.external_id,

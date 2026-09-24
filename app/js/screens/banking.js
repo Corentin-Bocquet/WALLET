@@ -10,13 +10,13 @@
 
 import { h, mount, icon } from '../lib/dom.js';
 import { glyph } from '../components/icons.js';
-import { navigate, parseHash } from '../lib/router.js';
+import { navigate, parseHash, refresh } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import { feedback } from '../lib/feedback.js';
 import {
   screenHead, subScreenHead, section, loadingRows, loadingBlock, emptyState,
-  errorState, badge, seeAll, switchRow, asyncBlock,
+  errorState, badge, seeAll, switchRow, asyncBlock, currencyToggle,
 } from '../components/ui.js';
 import { explainChip, labelWithInfo } from '../components/explain.js';
 import { bubbleChart, barList } from '../components/chart.js';
@@ -37,12 +37,23 @@ export async function bankingScreen() {
   let monthOffset = 0;
   let categoryFilter = query.categorie || null;
 
-  screen.append(subScreenHead('Mes dépenses', {
-    right: h('button.icon-btn', {
-      type: 'button', 'aria-label': 'Règles et mémoire', 'data-sound': 'select',
-      onclick: () => navigate('/banque/regles'),
-    }, glyph('settings')),
-  }));
+  screen.append(screenHead('Budget', { right: currencyToggle() }));
+
+  /* Raccourcis : tout ce qui touche au budget est joignable d'ici, sans
+     repasser par l'accueil ou le profil. */
+  const pendingCount = h('span.action-badge', { hidden: true });
+  screen.append(h('div.action-grid', { style: { marginBottom: '22px' } },
+    quickAction('question', 'À classer', () => navigate('/banque/a-classer'), pendingCount),
+    quickAction('refresh', 'Récurrents', () => navigate('/banque/recurrent')),
+    quickAction('brain', 'Règles', () => navigate('/banque/regles')),
+    quickAction('inbox', 'Importer', () => navigate('/profil/comptes')),
+  ));
+  repo.listTransactions({ status: 'active', limit: 2000 })
+    .then((rows) => {
+      const n = rows.filter((t) => t.needsConfirmation).length;
+      if (n) { pendingCount.textContent = n > 99 ? '99+' : String(n); pendingCount.hidden = false; }
+    })
+    .catch(() => {});
 
   /* Sélecteur de mois, comme sur l'écran de référence */
   const monthPicker = h('div.hscroll', { style: { marginBottom: '20px' } });
@@ -147,6 +158,12 @@ export async function bankingScreen() {
   return screen;
 }
 
+function quickAction(iconName, label, onClick, extra = null) {
+  return h('button', { type: 'button', 'data-sound': 'select', onclick: onClick },
+    h('div.icon-btn.icon-btn--lg', { style: { position: 'relative' } }, glyph(iconName, 22), extra),
+    h('span', label));
+}
+
 function summaryCard(summary) {
   if (!summary) return h('div');
 
@@ -157,12 +174,12 @@ function summaryCard(summary) {
 
   return h('div.card',
     h('div', { style: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '18px' } },
-      figure('💳 Dépenses', money(expense, { decimals: 0 })),
-      figure('💶 Revenus', income > 0 ? money(income, { decimals: 0 }) : h('span.unknown', '—')),
-      invested > 0 ? figure('📊 Investi', money(invested, { decimals: 0 })) : null,
+      figure([glyph('card', 16), 'Dépenses'], money(expense, { decimals: 0 })),
+      figure([glyph('cash', 16), 'Revenus'], income > 0 ? money(income, { decimals: 0 }) : h('span.unknown', '—')),
+      invested > 0 ? figure([glyph('chart', 16), 'Investi'], money(invested, { decimals: 0 })) : null,
       figure(
         h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '6px' } },
-          '🏦 Épargne', explainChip('savings_rate', { label: "taux d'épargne" })),
+          glyph('bank', 16), 'Épargne', explainChip('savings_rate', { label: "taux d'épargne" })),
         rate === null ? h('span.unknown', '—') : `${Math.round(rate)} %`,
         rate === null ? 'revenus inconnus' : money(Number(summary.net_savings), { decimals: 0 }),
       ),
@@ -189,9 +206,10 @@ function toClassifyBanner(transactions) {
     onclick: () => navigate('/banque/a-classer'),
   },
     h('div', { style: { display: 'flex', gap: '12px', alignItems: 'center' } },
-      h('span', { style: { fontSize: '22px' } }, glyph('question')),
+      h('span.lead-icon', glyph('question')),
       h('div',
-        h('div', { style: { fontWeight: '600' } }, `${pending.length} transactions à classer`),
+        h('div', { style: { fontWeight: '600' } },
+          `${pending.length} ${pending.length > 1 ? 'transactions' : 'transaction'} à classer ce mois-ci`),
         h('div.muted', { style: { fontSize: 'var(--fs-sm)' } },
           'WALLET hésite. Dites-lui une fois, il retiendra.'),
       ),
@@ -605,19 +623,20 @@ export async function recurringScreen() {
       type: 'button', 'aria-label': 'Recalculer', 'data-sound': 'select',
       onclick: async (event) => {
         const button = event.currentTarget;
-        button.textContent = '…';
         button.disabled = true;
+        button.classList.add('is-spinning');
         try {
           await repo.refreshRecurring();
           toast('Récurrences recalculées', { kind: 'success' });
-          setTimeout(() => window.location.reload(), 500);
+          refresh();
         } catch (error) {
           toast(error.message, { kind: 'error' });
-          button.textContent = '⟳';
+        } finally {
           button.disabled = false;
+          button.classList.remove('is-spinning');
         }
       },
-    }, '⟳'),
+    }, glyph('refresh')),
   }));
 
   const body = h('div');

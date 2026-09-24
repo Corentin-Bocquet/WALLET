@@ -46,6 +46,28 @@ function loadScript(src) {
 }
 
 /** Déballe une réponse PostgREST en levant une erreur lisible. */
+/**
+ * Appel d'une Edge Function avec le VRAI message d'erreur.
+ *
+ * Sur une réponse non-2xx, supabase-js renvoie `data: null` et une erreur au
+ * libellé générique (« Edge Function returned a non-2xx status code »). Le
+ * message utile (« Déjà synchronisé récemment. Réessayez dans 45 s. », « Clé
+ * Kraken refusée ») est dans le corps de la réponse, qu'il faut lire soi-même.
+ */
+async function invokeFunction(sb, name, body = {}, fallback = 'Service indisponible.') {
+  const { data, error } = await sb.functions.invoke(name, { body });
+  if (!error) return data;
+
+  let message = null;
+  try {
+    const payload = await error.context?.json?.();
+    message = payload?.message || payload?.error || null;
+  } catch { /* corps absent ou non JSON */ }
+  const wrapped = new Error(message || error.message || fallback);
+  wrapped.status = error.context?.status;
+  throw wrapped;
+}
+
 function unwrap({ data, error }, context) {
   if (error) {
     const err = new Error(error.message || 'Erreur inattendue');
@@ -171,16 +193,12 @@ export const supabaseBackend = {
   /** Taux de change du jour, base euro : { USD: 1.1669 }. */
   async askAssistant(question) {
     const sb = await getClient();
-    const { data, error } = await sb.functions.invoke('ai-assistant', { body: { question } });
-    if (error) throw new Error(data?.message || error.message || 'Assistant indisponible.');
-    return data;
+    return invokeFunction(sb, 'ai-assistant', { question }, 'Assistant indisponible.');
   },
 
   async categorizeWithAI() {
     const sb = await getClient();
-    const { data, error } = await sb.functions.invoke('ai-categorize', { body: {} });
-    if (error) throw new Error(data?.message || error.message || 'Classement indisponible.');
-    return data;
+    return invokeFunction(sb, 'ai-categorize', {}, 'Classement indisponible.');
   },
 
   async lastTransactionDate() {
@@ -736,19 +754,13 @@ export const supabaseBackend = {
 
   async saveCredential({ provider, label, apiKey, apiSecret, passphrase }) {
     const sb = await getClient();
-    const { data, error } = await sb.functions.invoke('credentials-store', {
-      body: { provider, label, apiKey, apiSecret, passphrase },
-    });
-    if (error) throw new Error(error.message || 'Enregistrement impossible');
-    return data;
+    return invokeFunction(sb, 'credentials-store',
+      { provider, label, apiKey, apiSecret, passphrase }, 'Enregistrement impossible.');
   },
 
   async deleteCredential(id) {
     const sb = await getClient();
-    const { error } = await sb.functions.invoke('credentials-store', {
-      body: { action: 'delete', id },
-    });
-    if (error) throw new Error(error.message);
+    await invokeFunction(sb, 'credentials-store', { action: 'delete', id }, 'Suppression impossible.');
     return { ok: true };
   },
 
@@ -757,9 +769,7 @@ export const supabaseBackend = {
     const fn = { market: 'market-sync', kraken: 'kraken-sync', okx: 'okx-sync',
       portfolio: 'portfolio-snapshot', alerts: 'alerts-run' }[scope];
     if (!fn) throw new Error(`portée inconnue : ${scope}`);
-    const { data, error } = await sb.functions.invoke(fn, { body: {} });
-    if (error) throw new Error(error.message);
-    return data;
+    return invokeFunction(sb, fn, {}, 'Synchronisation impossible.');
   },
 
   async getSyncState() {

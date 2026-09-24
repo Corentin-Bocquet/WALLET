@@ -213,14 +213,23 @@ export async function getNetWorth() {
     cash += Number(account.balance);
   }
 
+  // Un compte exclu du patrimoine (ou désactivé) l'est aussi pour ses
+  // positions : sans ce filtre, ses cryptos restaient comptées dans le total.
+  const excluded = new Set(accounts
+    .filter((a) => !a.include_in_net_worth || a.is_active === false)
+    .map((a) => a.id));
+
   for (const holding of holdings) {
+    if (excluded.has(holding.account_id ?? holding.account?.id)) continue;
     if (holding.value === null || holding.value === undefined) {
       unknownAccounts.push({ label: holding.symbol, kind: 'holding' });
       continue;
     }
     if (holding.quote_fetched_at) {
       const age = (Date.now() - new Date(holding.quote_fetched_at).getTime()) / 1000;
-      if (age > config.freshness.quotesSeconds) stalePrices.push(holding.symbol);
+      if (age > config.freshness.quotesSeconds && !stalePrices.includes(holding.symbol)) {
+        stalePrices.push(holding.symbol);
+      }
     }
     if (holding.asset?.kind === 'stock' || holding.asset?.kind === 'etf') equity += holding.value;
     else crypto += holding.value;
@@ -307,9 +316,16 @@ export const forgetMemory = async (key, bucket) => {
  * l'écran « Paiements récurrents » resterait vide indéfiniment alors que les
  * données nécessaires sont là.
  */
-export const listRecurring = () => cached('recurring', 5 * MIN, async () => {
+export const listRecurring = () => cached('recurring', 5 * MIN, () => detectAndStoreRecurring(false));
+
+/**
+ * `force` relance la détection même si des récurrences existent déjà. Sans
+ * lui, la première détection était définitive : un abonnement souscrit après
+ * coup n'apparaissait jamais, et le bouton « Recalculer » ne recalculait rien.
+ */
+async function detectAndStoreRecurring(force) {
   const existing = await backend.listRecurring();
-  if (existing.length || !backend.refreshRecurring) return existing;
+  if ((existing.length && !force) || !backend.refreshRecurring) return existing;
 
   const transactions = await backend.listTransactions({ status: 'active', limit: 2000 })
     .catch(() => []);
@@ -320,7 +336,7 @@ export const listRecurring = () => cached('recurring', 5 * MIN, async () => {
   if (!detected.length) return existing;
 
   return backend.refreshRecurring(detected).catch(() => existing);
-});
+}
 
 export const listAnomalies = () =>
   cached('anomalies', 5 * MIN, () => backend.listAnomalies?.() ?? []);
@@ -329,12 +345,20 @@ export const listAnomalies = () =>
 export async function refreshRecurring() {
   invalidate('recurring');
   invalidate('anomalies');
-  return listRecurring();
+  const promise = detectAndStoreRecurring(true);
+  // Le résultat frais remplace le cache : l'écran qui se redessine juste
+  // après ne relance pas une seconde détection.
+  cache.set('recurring', { at: Date.now(), promise });
+  return promise;
 }
 export const listImportBatches = () => backend.listImportBatches?.() ?? [];
 export const importTransactions = async (rows, batch) => {
   invalidate('tx:'); invalidate('summary'); invalidate('recurring');
-  return backend.importTransactions?.(rows, batch);
+  const result = await backend.importTransactions?.(rows, batch);
+  // Un nouveau relevé peut révéler un nouvel abonnement : on relance la
+  // détection en arrière-plan, sans faire attendre l'écran d'import.
+  refreshRecurring().catch(() => {});
+  return result;
 };
 
 /**
@@ -344,8 +368,15 @@ export const importTransactions = async (rows, batch) => {
 export async function monthlySummary(month) {
   if (backend.monthlySummary) return backend.monthlySummary(month);
 
-  const start = monthStart(month);
-  const end = monthEnd(month);
+  return summarizeRange(monthStart(month), monthEnd(month));
+}
+
+/**
+ * Même synthèse, sur une période quelconque. Sert à comparer le mois en cours
+ * au MÊME nombre de jours du mois précédent : comparer 24 jours de septembre à
+ * 31 jours d'août affichait une baisse de dépenses qui n'existait pas.
+ */
+export async function summarizeRange(start, end) {
   const [rows, categories] = await Promise.all([
     listTransactions({ from: start, to: end, limit: 2000 }),
     listCategories(),
@@ -463,6 +494,31 @@ export const triggerSync = async (scope) => {
   invalidate('');
   return result;
 };
+/**
+ * Synchronise TOUS les exchanges connectés, puis recalcule le patrimoine.
+ *
+ * Le bouton du portefeuille ne relançait que Kraken : un utilisateur OKX
+ * touchait « synchroniser » et rien ne bougeait. Chaque exchange est traité
+ * indépendamment : une clé refusée chez l'un n'empêche pas l'autre.
+ *
+ * @returns {Promise<Array<{provider:string, ok:boolean, message?:string}>>}
+ */
+export async function syncExchanges() {
+  const credentials = await backend.listCredentials?.().catch(() => []) ?? [];
+  const providers = [...new Set(credentials.map((c) => c.provider))]
+    .filter((p) => p === 'kraken' || p === 'okx');
+
+  const settled = await Promise.allSettled(providers.map((p) => backend.triggerSync(p)));
+  if (providers.length) await backend.triggerSync?.('portfolio').catch(() => {});
+  invalidate('');
+
+  return providers.map((provider, i) => ({
+    provider,
+    ok: settled[i].status === 'fulfilled',
+    message: settled[i].reason?.message,
+  }));
+}
+
 export const getSyncState = () => cached('sync', 20000, () => backend.getSyncState());
 
 export const logAssistant = (entry) => backend.logAssistant?.(entry);

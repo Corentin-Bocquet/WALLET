@@ -13,6 +13,7 @@ import { bootTheme, applyTheme } from './lib/theme.js';
 import { installGlobalFeedback, setFeedbackPrefs, feedback } from './lib/feedback.js';
 import { defineRoute, start, navigate, refresh } from './lib/router.js';
 import { bottomNav } from './components/nav.js';
+import { glyph } from './components/icons.js';
 import { toast } from './lib/toast.js';
 import { config, isConfigured } from './config.js';
 import * as repo from './data/repo.js';
@@ -45,7 +46,7 @@ boot().catch((error) => {
   console.error('[wallet] démarrage impossible', error);
   mount(root, h('main.screen',
     h('div.empty',
-      h('div.empty__emoji', '💥'),
+      h('div.empty__emoji', glyph('alert')),
       h('div.empty__title', 'WALLET n’a pas pu démarrer'),
       h('p.muted', error.message),
       h('button.btn.btn--primary', {
@@ -72,7 +73,7 @@ async function boot() {
     if (isConfigured()) {
       mount(root, h('main.screen',
         h('div.empty',
-          h('div.empty__emoji', '📡'),
+          h('div.empty__emoji', glyph('clock')),
           h('div.empty__title', 'Serveur injoignable'),
           h('p.muted', 'Vérifiez votre connexion, ou l’URL de votre projet Supabase.'),
           h('button.btn.btn--primary', {

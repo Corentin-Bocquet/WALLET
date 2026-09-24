@@ -100,3 +100,44 @@ export async function writeHoldings(
 
 export const isStable = (symbol: string) => STABLE.has(symbol);
 export const isFiat = (symbol: string) => FIAT.has(symbol);
+
+/**
+ * Devise de cotation d'une paire d'exchange, ramenée à une devise réelle :
+ * un stablecoin dollar vaut un dollar, un stablecoin euro vaut un euro.
+ *   « XXBTZEUR » → EUR, « SOL-USDT » → USD, « ETHUSDC » → USD
+ */
+export function quoteCurrency(pair: string): string | null {
+  const raw = String(pair ?? '').toUpperCase().replace(/[-_/]/g, '');
+  const match = /(ZEUR|ZUSD|EURT|EURC|USDT|USDC|EUR|USD|GBP|CHF)$/.exec(raw);
+  if (!match) return null;
+  const quote = match[1];
+  if (quote === 'ZEUR' || quote === 'EURT' || quote === 'EURC') return 'EUR';
+  if (quote === 'ZUSD' || quote === 'USDT' || quote === 'USDC') return 'USD';
+  return quote;
+}
+
+/**
+ * Taux EUR → devise les plus récents (table fx_rates, alimentée par
+ * market-sync). Sert à ramener en euros le prix d'un achat fait en dollars :
+ * sans cela, un achat de BTC à 60 000 USDT était comparé à un historique en
+ * euros comme s'il avait coûté 60 000 €, et l'analyse de comportement
+ * (« achats dans les creux ») se trompait d'environ 8 %.
+ */
+export async function latestEurRates(service: SupabaseClient): Promise<Map<string, number>> {
+  const { data } = await service.from('fx_rates')
+    .select('quote, rate, day').eq('base', 'EUR')
+    .order('day', { ascending: false }).limit(60);
+  const rates = new Map<string, number>([['EUR', 1]]);
+  for (const row of data ?? []) {
+    if (!rates.has(row.quote)) rates.set(row.quote, Number(row.rate));
+  }
+  return rates;
+}
+
+/** Prix converti en euros, ou null si la devise n'a pas de taux connu. */
+export function priceInEur(price: unknown, currency: string | null, rates: Map<string, number>) {
+  const value = Number(price);
+  if (!Number.isFinite(value)) return null;
+  const rate = rates.get(currency ?? 'EUR');
+  return rate ? value / rate : null;
+}

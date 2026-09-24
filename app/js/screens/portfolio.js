@@ -5,7 +5,7 @@
 import { h, mount } from '../lib/dom.js';
 import { assetAvatar, accountBadge, brandLogo } from '../components/brand.js';
 import { glyph } from '../components/icons.js';
-import { navigate } from '../lib/router.js';
+import { navigate, refresh } from '../lib/router.js';
 import { openSheet, confirmSheet } from '../lib/sheet.js';
 import { toast } from '../lib/toast.js';
 import {
@@ -13,10 +13,12 @@ import {
   loadingBlock, emptyState, asyncBlock, errorState, badge, seeAll,
 } from '../components/ui.js';
 import { explainChip } from '../components/explain.js';
-import { areaChart, bubbleChart, barList } from '../components/chart.js';
+import { areaChart, donutChart, barList } from '../components/chart.js';
 import { money, pct, num, day as fmtDay, trendClass, UNKNOWN } from '../lib/fmt.js';
 import * as repo from '../data/repo.js';
 import { analyseBehaviour } from '../engine/behaviour.js';
+
+const KIND_LABEL = { bank: 'Banque', exchange: 'Exchange crypto', broker: 'Courtier', cash: 'Espèces', manual: 'Saisie manuelle' };
 
 export async function portfolioScreen() {
   const screen = h('main.screen');
@@ -25,9 +27,9 @@ export async function portfolioScreen() {
     right: h('div.head__tools',
       currencyToggle({ compact: true }),
       h('button.icon-btn', {
-        type: 'button', 'aria-label': 'Synchroniser', 'data-sound': 'select',
+        type: 'button', 'aria-label': 'Synchroniser mes exchanges', 'data-sound': 'select',
         onclick: (event) => sync(event.currentTarget),
-      }, '⟳'),
+      }, glyph('refresh')),
     ),
   }));
 
@@ -80,55 +82,97 @@ export async function portfolioScreen() {
 }
 
 async function sync(button) {
-  button.textContent = '…';
+  if (repo.isDemoMode()) {
+    toast('Rien à synchroniser en mode démonstration', { kind: 'error' });
+    return;
+  }
+
   button.disabled = true;
+  button.classList.add('is-spinning');
   try {
-    await repo.triggerSync('kraken');
-    toast('Synchronisation lancée', { kind: 'success' });
-  } catch (error) {
-    // En mode démonstration, il n'y a rien à synchroniser : le dire franchement.
-    toast(repo.isDemoMode()
-      ? 'Rien à synchroniser en mode démonstration'
-      : `Synchronisation impossible : ${error.message}`, { kind: 'error' });
+    const results = await repo.syncExchanges();
+    if (!results.length) {
+      toast('Aucun exchange connecté. Ajoutez une clé dans Profil → Comptes.', { kind: 'error' });
+      return;
+    }
+    const failed = results.filter((r) => !r.ok);
+    const name = (p) => ({ kraken: 'Kraken', okx: 'OKX' }[p] ?? p);
+    if (!failed.length) {
+      toast(`${results.map((r) => name(r.provider)).join(' et ')} à jour`, { kind: 'success' });
+    } else {
+      toast(failed.map((r) => `${name(r.provider)} : ${r.message}`).join(' · '), { kind: 'error', duration: 7000 });
+    }
+    // Un nouveau rendu suffit : recharger toute la page faisait perdre la
+    // position et rejouait l'écran de chargement, même en cas d'échec.
+    refresh();
   } finally {
-    button.textContent = '⟳';
     button.disabled = false;
-    setTimeout(() => window.location.reload(), 600);
+    button.classList.remove('is-spinning');
   }
 }
+
+const RANGES = [
+  { key: 30, label: '1 mois' },
+  { key: 90, label: '3 mois' },
+  { key: 365, label: '1 an' },
+];
 
 async function renderHero(host) {
   try {
     const [netWorth, sync] = await Promise.all([repo.getNetWorth(), repo.getSyncState().catch(() => ({}))]);
-    const series = netWorth.series || [];
+    const container = h('div');
+    let days = 30;
 
-    mount(host,
-      bigAmount(netWorth.total, {
-        label: 'Valeur totale',
-        explain: 'net_worth',
-        change: netWorth.change_30d,
-        changePct: netWorth.change_30d_pct,
-        changeLabel: 'sur 30 jours',
-      }),
-      h('div', { style: { marginTop: '10px' } },
-        freshness(sync.market?.last_success ?? sync.kraken?.last_success, {
-          status: sync.market?.status, message: sync.market?.message, thresholdSeconds: 3600,
-        })),
-      netWorth.is_partial
-        ? h('div', { style: { marginTop: '14px' } },
-            partialNotice(netWorth.unknown, { onFix: () => navigate('/profil/comptes') }))
-        : null,
-      netWorth.stale_prices?.length
-        ? h('div.notice.notice--warn', { style: { marginTop: '12px' } },
-            h('span', glyph('clock')),
-            h('div', h('strong', 'Prix anciens'),
-              `${netWorth.stale_prices.join(', ')} : le dernier prix connu date d'un moment. La valeur affichée peut avoir bougé.`))
-        : null,
-      series.length > 2
-        ? h('div', { style: { marginTop: '20px' } },
-            areaChart(series.map((s) => ({ day: s.day, value: Number(s.total_value ?? s.total) })), { height: 150 }))
-        : null,
-    );
+    // La courbe et la variation portent sur LA MÊME période. Avant, la
+    // variation était « sur 30 jours » et la courbe couvrait tout
+    // l'historique : un portefeuille en baisse sur le mois s'affichait avec
+    // une courbe qui montait.
+    const paint = () => {
+      const series = (netWorth.series || []).slice(-days);
+      const first = series.length ? Number(series[0].total_value ?? series[0].total) : null;
+      const change = first !== null ? netWorth.total - first : null;
+      const changePct = first ? ((netWorth.total / first) - 1) * 100 : null;
+
+      mount(container,
+        bigAmount(netWorth.total, {
+          label: 'Valeur totale',
+          explain: 'net_worth',
+          change,
+          changePct,
+          changeLabel: `sur ${RANGES.find((r) => r.key === days)?.label}`,
+        }),
+        h('div', { style: { marginTop: '10px' } },
+          freshness(sync.market?.last_success ?? sync.kraken?.last_success, {
+            status: sync.market?.status, message: sync.market?.message, thresholdSeconds: 3600,
+          })),
+        netWorth.is_partial
+          ? h('div', { style: { marginTop: '14px' } },
+              partialNotice(netWorth.unknown, { onFix: () => navigate('/profil/comptes') }))
+          : null,
+        netWorth.stale_prices?.length
+          ? h('div.notice.notice--warn', { style: { marginTop: '12px' } },
+              h('span', glyph('clock')),
+              h('div', h('strong', 'Prix anciens'),
+                `${netWorth.stale_prices.join(', ')} : le dernier prix connu date d'un moment. La valeur affichée peut avoir bougé.`))
+          : null,
+        series.length > 2
+          ? h('div', { style: { marginTop: '20px' } },
+              areaChart(series.map((s) => ({ day: s.day, value: Number(s.total_value ?? s.total) })), { height: 150 }))
+          : null,
+        (netWorth.series || []).length > 2
+          ? h('div.segmented', { style: { marginTop: '14px' } },
+              RANGES.map((range) => h('button', {
+                type: 'button',
+                'aria-selected': String(range.key === days),
+                'data-sound': 'select',
+                onclick: () => { days = range.key; paint(); },
+              }, range.label)))
+          : null,
+      );
+    };
+
+    paint();
+    mount(host, container);
   } catch (error) {
     mount(host, errorState(error, { what: 'votre portefeuille' }));
   }
@@ -151,8 +195,8 @@ async function renderSplit(host) {
 
     const total = buckets.reduce((a, b) => a + b.value, 0);
     mount(host,
-      bubbleChart(buckets),
-      h('div.rows', { style: { marginTop: '8px' } },
+      donutChart(buckets, { centerLabel: 'Patrimoine' }),
+      h('div.rows', { style: { marginTop: '16px' } },
         buckets.map((b) => h('div.row',
           h('div.avatar.avatar--dot', { style: { background: b.color } }),
           h('div.row__main', h('div.row__title', b.label)),
@@ -305,12 +349,14 @@ function renderAccounts(accounts, holdings = []) {
       ({ bank: glyph('bank'), exchange: glyph('coin'), broker: glyph('trendUp'), cash: glyph('cash'), manual: glyph('pen') })[account.kind] ?? glyph('box')),
     h('div.row__main',
       h('div.row__title', account.label),
-      h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : account.provider),
+      h('div.row__sub', account.iban_last4 ? `•••• ${account.iban_last4}` : (KIND_LABEL[account.kind] ?? 'Compte')),
     ),
     (() => {
       const positions = positionsByAccount.get(account.id) ?? 0;
-      const cash = Number(account.balance);
-      const hasCash = Number.isFinite(cash);
+      // Number(null) vaut 0 : sans ce test, un solde inconnu passait pour 0 €.
+      const hasCash = account.balance !== null && account.balance !== undefined
+        && account.balance !== '' && Number.isFinite(Number(account.balance));
+      const cash = hasCash ? Number(account.balance) : 0;
       const totalValue = (hasCash ? cash : 0) + positions;
       const known = hasCash || positions > 0;
 
@@ -318,8 +364,8 @@ function renderAccounts(accounts, holdings = []) {
         known
           ? h('div.row__value.sensitive', money(totalValue))
           : h('div.row__value.unknown', '—'),
-        positions > 0 && hasCash
-          ? h('div.row__sub.muted-2', `dont ${money(positions)} en positions`)
+        positions > 0 && cash > 0
+          ? h('div.row__sub.muted-2', `dont ${money(cash, { decimals: 0 })} de liquidités`)
           : (known
               ? h('div.row__sub', freshness(account.balance_at, { prefix: '', thresholdSeconds: 86400 }))
               : h('div.row__sub.muted-2', 'solde inconnu')),
@@ -341,7 +387,7 @@ async function renderBehaviour(host) {
 
     if (!analysis.available) {
       mount(host, h('div.notice',
-        h('span', 'ℹ'),
+        h('span', glyph('info')),
         h('div', h('strong', 'Pas encore assez d’achats'), analysis.reason)));
       return;
     }
@@ -370,7 +416,7 @@ async function renderBehaviour(host) {
         }),
       },
         h('div', { style: { display: 'flex', gap: '12px', alignItems: 'flex-start' } },
-          h('span', { style: { fontSize: '20px' } },
+          h('span.lead-icon', { style: { color: ({ success: 'var(--up)', warning: 'var(--warn)', danger: 'var(--down)' })[observation.severity] ?? 'var(--info)' } },
             ({ success: glyph('checkCircle'), warning: glyph('alert'), danger: glyph('dot') })[observation.severity] ?? glyph('bulb')),
           h('div',
             h('div', { style: { fontWeight: '600' } }, observation.title),

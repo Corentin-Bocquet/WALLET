@@ -164,6 +164,9 @@ export async function okxFills(keys: OkxKeys) {
     quantity: Number(fill.fillSz),
     price: Number(fill.fillPx),
     fee: Math.abs(Number(fill.fee ?? 0)),
+    // OKX facture souvent l'achat dans l'actif reçu (frais en BTC sur un
+    // achat de BTC) : sans la devise, ces frais étaient lus comme des euros.
+    fee_currency: fill.feeCcy ?? null,
     executed_at: new Date(Number(fill.ts)).toISOString(),
   }));
 }

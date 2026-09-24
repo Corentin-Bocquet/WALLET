@@ -115,8 +115,8 @@ export function areaChart(points, {
     const maxIndex = values.indexOf(max);
     const minIndex = values.indexOf(min);
     wrapper.append(
-      extremeLabel(money(max, { currency, compact: true }), x(maxIndex) / width, 'top'),
-      extremeLabel(money(min, { currency, compact: true }), x(minIndex) / width, 'bottom'),
+      extremeLabel(money(max, { currency, compact: true, decimals: max >= 100 ? 0 : undefined }), x(maxIndex) / width, 'top'),
+      extremeLabel(money(min, { currency, compact: true, decimals: min >= 100 ? 0 : undefined }), x(minIndex) / width, 'bottom'),
     );
   }
 
@@ -347,6 +347,64 @@ function pack(radii, size) {
 }
 
 /**
+ * Anneau de répartition, pour 2 à 5 parts d'un tout (crypto, liquidités…).
+ *
+ * Avec deux ou trois postes, les bulles donnaient deux ronds collés dont on
+ * ne lisait pas la proportion ; un anneau la montre d'un coup d'œil et garde
+ * le total au centre.
+ */
+export function donutChart(items, { size = 200, thickness = 22, centerLabel = 'Total', currency } = {}) {
+  const data = (items || [])
+    .map((it) => ({ ...it, value: Math.abs(Number(it.value)) }))
+    .filter((it) => Number.isFinite(it.value) && it.value > 0);
+  const total = data.reduce((a, it) => a + it.value, 0);
+  if (!total) return h('div.empty', h('p.muted', 'Rien à afficher.'));
+
+  const r = (size - thickness) / 2;
+  const c = size / 2;
+  const circumference = 2 * Math.PI * r;
+  // Un léger jour entre les parts, sauf s'il n'y en a qu'une.
+  const gap = data.length > 1 ? 3 : 0;
+
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${size} ${size}`, width: size, height: size,
+    role: 'img', 'aria-label': data.map((d) => `${d.label} ${Math.round((d.value / total) * 100)} %`).join(', '),
+  });
+  svg.append(svgEl('circle', { cx: c, cy: c, r, fill: 'none', stroke: 'var(--surface)', 'stroke-width': thickness }));
+
+  let offset = 0;
+  for (const item of data) {
+    const length = (item.value / total) * circumference;
+    const arc = svgEl('circle', {
+      cx: c, cy: c, r, fill: 'none',
+      stroke: item.color || 'var(--accent)', 'stroke-width': thickness,
+      'stroke-dasharray': `${Math.max(0, length - gap)} ${circumference}`,
+      'stroke-dashoffset': -offset,
+      transform: `rotate(-90 ${c} ${c})`,
+    });
+    const title = svgEl('title');
+    title.textContent = `${item.label} : ${money(item.value, { currency })}`;
+    arc.append(title);
+    svg.append(arc);
+    offset += length;
+  }
+
+  return h('div', { style: { position: 'relative', width: `${size}px`, height: `${size}px`, marginInline: 'auto' } },
+    svg,
+    h('div', {
+      style: {
+        position: 'absolute', inset: '0', display: 'grid', placeContent: 'center',
+        textAlign: 'center', pointerEvents: 'none',
+      },
+    },
+      h('div.muted', { style: { fontSize: 'var(--fs-sm)' } }, centerLabel),
+      h('div.num.sensitive', { style: { fontSize: '22px', fontWeight: '700' } },
+        money(total, { currency, compact: true, decimals: 0 })),
+    ),
+  );
+}
+
+/**
  * Barre de zones (§28) avec curseur : cinq bandes colorées et un repère.
  */
 export function zoneBar(score, thresholds) {
@@ -393,7 +451,9 @@ export function barList(items, { currency = 'EUR', onSelect } = {}) {
           h('div.meter', { style: { marginTop: '6px', height: '6px' } },
             h('div.meter__fill', { style: { width: `${(value / max) * 100}%`, background: item.color } })),
         ),
-        h('div.row__end',
+        // Largeur fixe : sans elle, la barre de « 56 € » était plus longue
+        // que celle de « 768 € », et les pistes ne s'alignaient pas.
+        h('div.row__end', { style: { minWidth: '76px' } },
           h('div.row__value.sensitive', money(value, { currency, decimals: 0 })),
           item.share !== null && item.share !== undefined
             ? h('div.row__sub', `${Math.round(item.share)} %`) : null,
@@ -418,9 +478,11 @@ export function arcGauge(value, { label = null, size = 240, thickness = 18 } = {
   const clamped = known ? Math.min(100, Math.max(0, value)) : 0;
 
   const w = size;
-  const h = size * 0.60;
+  // Surtout pas « h » : ce nom masquerait la fonction h() de construction du
+  // DOM, et la jauge levait une erreur avalée par l'écran Marchés.
+  const height = size * 0.60;
   const cx = w / 2;
-  const cy = h - thickness * 0.4;
+  const cy = height - thickness * 0.4;
   const r = (w - thickness) / 2;
 
   // Cinq paliers, du plus craintif au plus cupide.
@@ -438,7 +500,7 @@ export function arcGauge(value, { label = null, size = 240, thickness = 18 } = {
   };
 
   const svg = document.createElementNS(SVGNS, 'svg');
-  svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
+  svg.setAttribute('viewBox', `0 0 ${w} ${height}`);
   svg.setAttribute('width', '100%');
   svg.setAttribute('role', 'img');
   svg.setAttribute('aria-label', known ? `${Math.round(clamped)} sur 100` : 'Valeur inconnue');
@@ -465,11 +527,11 @@ export function arcGauge(value, { label = null, size = 240, thickness = 18 } = {
     const halo = document.createElementNS(SVGNS, 'circle');
     halo.setAttribute('cx', px); halo.setAttribute('cy', py);
     halo.setAttribute('r', thickness * 0.62);
-    halo.setAttribute('fill', 'var(--bg-elevated, #16181d)');
+    halo.setAttribute('fill', 'var(--surface, #16181d)');
     const dot = document.createElementNS(SVGNS, 'circle');
     dot.setAttribute('cx', px); dot.setAttribute('cy', py);
     dot.setAttribute('r', thickness * 0.44);
-    dot.setAttribute('fill', '#fff');
+    dot.setAttribute('fill', 'var(--text, #fff)');
     svg.append(halo, dot);
   }
 
@@ -483,7 +545,7 @@ export function arcGauge(value, { label = null, size = 240, thickness = 18 } = {
         display: 'grid', justifyItems: 'center', gap: '2px', pointerEvents: 'none',
       },
     },
-      h('div.gauge__value', { style: { color: known ? '#fff' : 'var(--text-3)' } },
+      h('div.gauge__value', { style: { color: known ? 'var(--text)' : 'var(--text-3)' } },
         known ? String(Math.round(clamped)) : '—'),
       label ? h('div.gauge__label', { style: { color: known ? band.color : 'var(--text-3)' } }, label) : null,
     ),

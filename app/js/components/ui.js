@@ -12,7 +12,7 @@ import { glyph } from './icons.js';
 import { money, pct, ago, trendClass, trendArrow, UNKNOWN } from '../lib/fmt.js';
 import { config } from '../config.js';
 import { displayCurrency, cycleCurrency, canDisplay, onCurrencyChange } from '../lib/currency.js';
-import { back } from '../lib/router.js';
+import { back, navigate } from '../lib/router.js';
 import { explainChip } from './explain.js';
 
 /* — En-têtes ————————————————————————————————————————— */
@@ -37,6 +37,27 @@ export function subScreenHead(title, { right = null } = {}) {
     right || h('span', { style: { width: '40px' } }),
   );
 }
+
+/**
+ * Onglets internes d'une section de la barre basse (Cours · Opportunités).
+ * Ce sont des liens : chaque vue garde son adresse, son historique et sa
+ * position de défilement.
+ */
+export function subNav(items, activePath) {
+  return h('nav.subnav.segmented', { 'aria-label': 'Vues de la section' },
+    items.map((item) => h('button', {
+      type: 'button',
+      'aria-selected': String(item.path === activePath),
+      'aria-current': item.path === activePath ? 'page' : null,
+      'data-sound': 'select',
+      onclick: () => { if (item.path !== activePath) navigate(item.path); },
+    }, item.label)));
+}
+
+export const MARKETS_NAV = [
+  { path: '/marches', label: 'Cours' },
+  { path: '/opportunites', label: 'Opportunités' },
+];
 
 export function section(title, { action = null, explain = null } = {}, ...children) {
   return h('section.section',
@@ -220,6 +241,12 @@ export function asyncBlock(promise, {
 }
 
 /* — Divers ————————————————————————————————————————————— */
+
+/** Étiquette de zone : une pastille de couleur et le nom, sans emoji doublon. */
+export function zoneTag(meta, { asBadge = false } = {}) {
+  const dot = h('i.zone-dot', { style: { background: meta?.color ?? 'var(--text-3)' } });
+  return h(asBadge ? 'span.badge.zone-tag' : 'span.zone-tag', dot, meta?.label ?? 'zone inconnue');
+}
 
 export function badge(text, kind = '') {
   return h(`span.badge${kind ? `.badge--${kind}` : ''}`, text);

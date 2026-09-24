@@ -80,6 +80,29 @@ export function pct(value, { locale = config.defaultLocale, decimals = 2, sign =
   }).format(n) + ' %';
 }
 
+/** Score sur 100, à la française : « 51,2 » et non « 51.2 ». */
+export function score(value, { locale = config.defaultLocale } = {}) {
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (!isNum(n)) return UNKNOWN;
+  return nf(locale, { maximumFractionDigits: 1 }).format(n);
+}
+
+/**
+ * Très gros montant (capitalisation, volume) en milliards.
+ * La notation compacte française écrit 10¹² « 1 Bn », que tout le monde lit
+ * « 1 milliard » par réflexe anglais. « 1 058 Md € » ne laisse aucun doute.
+ */
+export function bigMoney(value, options = {}) {
+  const n = typeof value === 'string' ? Number(value) : value;
+  if (!isNum(n)) return UNKNOWN;
+  if (Math.abs(fromBase(n)) < 1e9) return money(n, { decimals: 0, ...options, compact: true });
+  // On formate le nombre de milliards comme un montant, puis on glisse
+  // « Md » juste avant le symbole de devise : « 1 058 Md € », « $1,058 Md ».
+  const billions = n / 1e9;
+  const text = money(billions, { ...options, decimals: Math.abs(fromBase(n)) >= 1e11 ? 0 : 1 });
+  return text.replace(/([\d,.\u202F\u00A0 ]+\d)/, '$1\u00A0Md');
+}
+
 /** Classe CSS de couleur selon le signe, neutre si inconnu. */
 export function trendClass(value) {
   if (!isNum(value) || value === 0) return 'muted';

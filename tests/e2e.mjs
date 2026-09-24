@@ -39,8 +39,8 @@ const step = (label) => console.log(`  · ${label}`);
 /* ---------------------------------------------------------------- */
 console.log('\n1. Navigation entre les cinq sections');
 for (const [route, title] of [
-  ['/', 'Accueil'], ['/marches', 'Marchés'], ['/portefeuille', 'Portefeuille'],
-  ['/opportunites', 'Opportunités'], ['/profil', 'Profil'],
+  ['/', 'Accueil'], ['/banque', 'Budget'], ['/portefeuille', 'Portefeuille'],
+  ['/marches', 'Marchés'], ['/opportunites', 'Marchés'], ['/profil', 'Profil'],
 ]) {
   await go(route);
   const heading = await page.locator('.screen__title').first().textContent();

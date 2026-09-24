@@ -23,7 +23,13 @@
   justify-content: space-between;
   gap: var(--sp-3);
 }
-.tile__label { color: var(--text-2); font-size: var(--fs-body); font-weight: 500; }
+.tile__label { color: var(--text-2); font-size: var(--fs-body); font-weight: 500; display: flex; align-items: center; gap: 8px; }
+.tile__label svg { width: 18px; height: 18px; flex: 0 0 auto; }
+
+/* Répartition du patrimoine sur l'accueil : parts égales, toute la largeur. */
+.split-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: var(--sp-3); }
+.split-grid .tile { min-width: 0; min-height: 0; gap: 10px; text-align: left; }
+.split-grid .tile__value { font-size: 22px; }
 .tile__value { font-weight: 700; letter-spacing: var(--tracking-title); }
 
 /* — Boutons ————————————————————————————————————————— */
@@ -88,6 +94,15 @@
 }
 .action-grid button { display: grid; justify-items: center; gap: var(--sp-2); }
 .action-grid span { font-size: var(--fs-sm); color: var(--text-2); }
+.action-grid .icon-btn--lg { background: var(--surface); }
+.action-grid .icon-btn--lg svg { color: var(--text); }
+.action-badge {
+  position: absolute; top: -4px; right: -6px;
+  min-width: 20px; height: 20px; padding: 0 6px;
+  border-radius: 999px; background: var(--accent); color: #0A0A0A;
+  font-size: 11px; font-weight: 700; line-height: 20px; text-align: center;
+}
+.action-badge[hidden] { display: none; }
 
 /* — Segmenté (Simple / Échange) ————————————————————— */
 .segmented {
@@ -107,6 +122,10 @@
   white-space: nowrap;
 }
 .segmented button[aria-selected="true"] { background: var(--surface-3); color: var(--text); }
+
+/* Onglets internes d'une section : toute la largeur, parts égales. */
+.subnav { display: flex; width: 100%; margin-bottom: var(--sp-5); }
+.subnav button { flex: 1 1 0; text-align: center; padding: 10px var(--sp-3); }
 
 /* Onglets défilants (Liste d'alerte / Toutes les cryptos …) */
 .tabs {
@@ -543,6 +562,13 @@
 .empty__emoji svg { width: 34px; height: 34px; margin-inline: auto; color: var(--text-3); }
 .notice svg, .row__sub svg { flex: 0 0 auto; }
 .notice > span:first-child svg { width: 20px; height: 20px; }
+/* Une icône en tête d'un bloc flexible ne doit jamais rétrécir : sans cela,
+   le texte long qui la suit l'écrasait à 6 px de large. */
+.notice > span:first-child,
+.lead-icon { flex: 0 0 auto; display: inline-flex; min-width: 20px; padding-top: 1px; }
+.lead-icon svg { width: 20px; height: 20px; }
+/* Filet de sécurité pour toute icône seule dans un bloc flexible. */
+span:has(> svg:only-child) { flex-shrink: 0; }
 .avatar img { display: block; }
 
 /* — Badges de compte sur une position —————————————————————
@@ -567,3 +593,12 @@
 .gauge { display: grid; place-items: center; gap: 2px; }
 .gauge__value { font-size: 34px; font-weight: 700; letter-spacing: -.03em; line-height: 1; }
 .gauge__label { font-size: var(--fs-sm); font-weight: 600; color: var(--text-2); }
+
+/* — Bouton en cours d'action ————————————————————————————— */
+.icon-btn.is-spinning svg { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .icon-btn.is-spinning svg { animation: none; opacity: .5; } }
+
+/* — Zones du score ——————————————————————————————————————— */
+.zone-tag { display: inline-flex; align-items: center; gap: 6px; }
+.zone-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; display: inline-block; }
