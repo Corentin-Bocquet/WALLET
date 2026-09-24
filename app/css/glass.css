@@ -295,22 +295,38 @@ body::before {
 .check-dot[aria-checked="true"] { background: var(--accent); color: var(--text-on-accent); box-shadow: none; }
 
 /* — Barre de question de l'assistant : une pilule de verre ——————————— */
+/* Pas de backdrop-filter ici : dans une feuille qui défile, Safari (iOS)
+   dessine le flou d'un élément arrondi comme un RECTANGLE qui déborde des
+   coins. Un remplissage presque opaque donne le même rendu, sans ce bug. */
 .ask-form {
   position: sticky; bottom: 0; z-index: 2;
   display: flex; align-items: center; gap: 8px;
   margin-top: 20px; padding: 6px 6px 6px 18px;
   border-radius: var(--r-pill);
-  background: var(--glass-shine), var(--glass-sheet);
-  border: 1px solid var(--glass-edge);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, .30), inset 0 1px 0 rgba(255, 255, 255, .14);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-  backdrop-filter: blur(24px) saturate(180%);
+  background: var(--glass-shine), var(--ask-bg);
+  border: 1px solid var(--glass-edge-soft);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, .28), inset 0 1px 0 rgba(255, 255, 255, .12);
+  overflow: hidden;
+  isolation: isolate;
 }
+:root { --ask-bg: #1B1F24; }
+:root[data-theme="light"] { --ask-bg: #FFFFFF; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]):not([data-theme="light"]) { --ask-bg: #FFFFFF; }
+}
+.ask-form:focus-within { border-color: color-mix(in srgb, var(--accent) 60%, transparent); }
+/* Le champ lui-même n'a AUCUN style natif : Safari lui ajoute sinon un fond,
+   une bordure et un anneau de focus rectangulaires. */
 .ask-form input {
   flex: 1; min-width: 0; height: 44px;
-  background: transparent; border: 0; outline: none;
-  font-size: var(--fs-body); color: var(--text);
+  -webkit-appearance: none; appearance: none;
+  background: transparent; border: 0; border-radius: 0; box-shadow: none;
+  outline: none; padding: 0;
+  font-size: 16px;                      /* 16 px : iOS ne zoome pas au focus */
+  color: var(--text);
 }
+.ask-form input:focus,
+.ask-form input:focus-visible { outline: none; box-shadow: none; }
 .ask-form input::placeholder { color: var(--text-3); }
 .ask-form__send {
   flex: 0 0 auto; width: 44px; height: 44px; border-radius: 50%;
@@ -320,3 +336,21 @@ body::before {
 }
 .ask-form__send:active { transform: scale(.9); }
 .ask-form__send svg { width: 20px; height: 20px; }
+
+/* — Dans une feuille qui défile : pas de flou imbriqué ———————————————
+   Safari dessine mal un backdrop-filter arrondi à l'intérieur d'un
+   conteneur qui défile (rectangle clair qui déborde). La feuille est déjà
+   floutée : ses cartes n'ont besoin que d'un voile. */
+.sheet .card, .sheet .glass, .sheet .notice, .sheet .tile,
+.sheet .icon-btn, .sheet .segmented, .sheet .field input, .sheet .field select, .sheet .field textarea {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* Champs de texte sans habillage natif de Safari (fond, bordure, ombre). */
+input[type="text"], input[type="search"], input[type="number"], input[type="email"],
+input[type="password"], input[type="url"], input[type="tel"], textarea {
+  -webkit-appearance: none;
+  appearance: none;
+}
+input[type="search"]::-webkit-search-decoration { -webkit-appearance: none; }

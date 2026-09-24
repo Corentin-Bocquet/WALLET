@@ -205,11 +205,33 @@ export function extractSymbol(question, knownSymbols = []) {
   for (const [name, symbol] of Object.entries(aliases)) {
     if (q.includes(name) && knownSymbols.includes(symbol)) return symbol;
   }
+  // Un symbole qui est aussi un mot courant (MON, ONE, TOP, KEY…) ne compte
+  // que s'il est écrit en MAJUSCULES : « combien vaut mon patrimoine » ne
+  // parle pas de la crypto MON. Idem pour les symboles de deux lettres.
+  const original = deaccent(String(question || ''));
+  const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   for (const symbol of knownSymbols) {
-    if (new RegExp(`\\b${symbol.toLowerCase()}\\b`).test(q)) return symbol;
+    const lower = symbol.toLowerCase();
+    const ambiguous = COMMON_WORDS.has(lower) || lower.length <= 2;
+    const found = ambiguous
+      ? new RegExp(`(^|[^A-Za-z0-9])${escape(symbol.toUpperCase())}([^A-Za-z0-9]|$)`).test(original)
+      : new RegExp(`\\b${escape(lower)}\\b`).test(q);
+    if (found) return symbol;
   }
   return null;
 }
+
+/** Mots français (et quelques anglais) qui sont aussi des symboles de crypto. */
+const COMMON_WORDS = new Set([
+  'mon', 'ma', 'mes', 'ton', 'ta', 'tes', 'son', 'sa', 'ses', 'notre', 'votre', 'leur',
+  'le', 'la', 'les', 'un', 'une', 'de', 'des', 'du', 'et', 'ou', 'en', 'au', 'aux',
+  'sur', 'par', 'pour', 'avec', 'sans', 'que', 'qui', 'quoi', 'est', 'ai', 'as', 'on',
+  'nous', 'vous', 'il', 'elle', 'ils', 'ce', 'cet', 'cette', 'ces', 'tout', 'tous',
+  'plus', 'moins', 'rien', 'oui', 'non', 'bien', 'mois', 'jour', 'an', 'ans', 'fin',
+  'top', 'one', 'key', 'gas', 'pay', 'max', 'win', 'fun', 'cat', 'dog', 'sun', 'ray',
+  'net', 'all', 'bit', 'ever', 'hot', 'bone', 'core', 'life', 'moon', 'safe', 'real',
+  'data', 'time', 'meme', 'more', 'open', 'high', 'low', 'dollar', 'euro', 'cash',
+]);
 
 /** Extrait un montant : « 200 000 € », « 200k », « 1,5 M ». */
 export function extractAmount(question) {

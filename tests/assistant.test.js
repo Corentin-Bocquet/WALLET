@@ -229,3 +229,13 @@ test('aucune réponse ne promet une certitude', async () => {
     assert.ok(!interdits.test(whole), `formulation trop affirmative : « ${whole} »`);
   }
 });
+
+test('« mon patrimoine » ne désigne pas la crypto MON, sauf écrite en majuscules', async () => {
+  const { extractSymbol, detectIntent } = await import('../app/js/engine/assistant.js');
+  const known = ['BTC', 'MON', 'ONE', 'SOL'];
+  const q1 = 'Combien vaut mon patrimoine ?';
+  assert.equal(extractSymbol(q1, known), null);
+  assert.equal(detectIntent(q1, { symbol: null }), 'net_worth');
+  assert.equal(extractSymbol('Combien ai-je en MON ?', known), 'MON');
+  assert.equal(extractSymbol('Combien ai-je de sol ?', known), 'SOL');
+});
