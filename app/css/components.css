@@ -614,3 +614,9 @@ span:has(> svg:only-child) { flex-shrink: 0; }
 }
 .ask-bar svg { color: var(--accent); flex: 0 0 auto; }
 .ask-bar:active { transform: scale(.98); }
+
+/* Repère de budget mensuel sur une barre de catégorie */
+.meter__mark {
+  position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px;
+  border-radius: 1px; background: var(--text);
+}

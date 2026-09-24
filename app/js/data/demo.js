@@ -34,6 +34,9 @@ const iso = (ms) => new Date(ms).toISOString().slice(0, 10);
 /* Catégories                                                          */
 /* ================================================================== */
 
+// Quelques budgets pour montrer la jauge « restants / au-dessus ».
+const DEMO_BUDGETS = { restaurant: 180, alimentation: 350, loisirs: 80, shopping: 60 };
+
 export const DEMO_CATEGORIES = [
   ['alimentation', 'Alimentation', '🛒', '#4CD964', 'expense'],
   ['restaurant', 'Restaurants', '🍔', '#FF9F0A', 'expense'],
@@ -60,7 +63,7 @@ export const DEMO_CATEGORIES = [
   ['transfert', 'Transfert interne', '🔁', '#636366', 'transfer'],
 ].map(([slug, label, emoji, color, kind], i) => ({
   id: `cat-${slug}`, slug, label, emoji, color, kind,
-  is_system: true, sort_order: i * 10, budget_month: null,
+  is_system: true, sort_order: i * 10, budget_month: DEMO_BUDGETS[slug] ?? null,
 }));
 
 /* ================================================================== */

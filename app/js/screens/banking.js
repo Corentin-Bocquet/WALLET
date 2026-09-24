@@ -137,6 +137,9 @@ export async function bankingScreen() {
                 h('div', { style: { marginTop: '12px' } },
                   barList(breakdown, {
                     onSelect: (item) => { categoryFilter = item.category_id; paint(); },
+                    budgets: new Map(categories
+                      .filter((c) => Number(c.budget_month) > 0)
+                      .map((c) => [c.id, Number(c.budget_month)])),
                   })),
               )
             : emptyState({ emoji: glyph('receipt'), title: 'Aucune dépense ce mois-ci' }),

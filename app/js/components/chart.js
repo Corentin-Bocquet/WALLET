@@ -438,18 +438,34 @@ export function zoneBar(score, thresholds) {
 /**
  * Barres horizontales simples, pour les répartitions détaillées.
  */
-export function barList(items, { currency = 'EUR', onSelect } = {}) {
+export function barList(items, { currency = 'EUR', onSelect, budgets = null } = {}) {
   const max = Math.max(...items.map((i) => Math.abs(i.value ?? i.total)), 1);
   return h('div.rows',
     items.map((item) => {
       const value = Math.abs(item.value ?? item.total);
+      // Toutes les barres gardent la même échelle (la plus grosse catégorie) ;
+      // un budget mensuel s'y ajoute comme un repère vertical, et la barre
+      // passe au rouge quand elle le dépasse.
+      const budget = Number(budgets?.get?.(item.category_id)) || null;
+      const over = budget && value > budget;
+      const scale = Math.max(max, ...(budget ? [budget] : []));
       const row = h('button.row', { type: 'button', 'data-sound': 'select',
         onclick: onSelect ? () => onSelect(item) : null },
         h('div.avatar', { style: { background: 'var(--surface-2)', fontSize: '18px' } }, item.emoji || '📦'),
         h('div.row__main',
           h('div.row__title', item.label),
-          h('div.meter', { style: { marginTop: '6px', height: '6px' } },
-            h('div.meter__fill', { style: { width: `${(value / max) * 100}%`, background: item.color } })),
+          h('div.meter', { style: { marginTop: '6px', height: '6px', position: 'relative', overflow: 'visible' } },
+            h('div.meter__fill', { style: {
+              width: `${Math.min(1, value / scale) * 100}%`,
+              background: over ? 'var(--down)' : item.color,
+            } }),
+            budget ? h('span.meter__mark', { style: { left: `${Math.min(1, budget / scale) * 100}%` },
+              title: `Budget ${money(budget, { currency, decimals: 0 })}` }) : null),
+          budget ? h('div.row__sub', { style: { marginTop: '4px', color: over ? 'var(--down)' : null } },
+            over
+              ? `+${money(value - budget, { currency, decimals: 0 })} sur un budget de ${money(budget, { currency, decimals: 0 })}`
+              : `Reste ${money(budget - value, { currency, decimals: 0 })} sur ${money(budget, { currency, decimals: 0 })}`)
+            : null,
         ),
         // Largeur fixe : sans elle, la barre de « 56 € » était plus longue
         // que celle de « 768 € », et les pistes ne s'alignaient pas.
