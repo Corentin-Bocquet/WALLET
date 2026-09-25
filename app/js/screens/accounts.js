@@ -61,8 +61,10 @@ export async function accountsScreen() {
       // cryptos. Sans cela, OKX s'affichait sans valeur alors que ses
       // positions pesaient plusieurs milliers d'euros.
       const positionsByAccount = new Map();
+      const syncedByAccount = new Map();
       for (const holding of holdings) {
         const id = holding.account_id ?? holding.account?.id;
+        if (id && holding.synced_at && !(syncedByAccount.get(id) > holding.synced_at)) syncedByAccount.set(id, holding.synced_at);
         if (!id || !Number.isFinite(holding.value)) continue;
         positionsByAccount.set(id, (positionsByAccount.get(id) ?? 0) + holding.value);
       }
@@ -88,9 +90,10 @@ export async function accountsScreen() {
                 known
                   ? h('div.row__value.sensitive', money((hasCash ? cash : 0) + positions))
                   : h('div.row__value.unknown', '—'),
-                positions > 0 && cash > 0
-                  ? h('div.row__sub.muted-2', `dont ${money(cash, { decimals: 0 })} de liquidités`)
-                  : h('div.row__sub.muted-2', positions > 0 ? 'positions crypto' : ''),
+                known
+                  ? h('div.row__sub', freshness(latestOf(account.balance_at, syncedByAccount.get(account.id)),
+                      { prefix: '', thresholdSeconds: 86400 }))
+                  : h('div.row__sub.muted-2', ''),
               );
             })(),
           )))
@@ -495,3 +498,5 @@ async function handleImport(file) {
     },
   });
 }
+
+const latestOf = (a, b) => (!a ? b ?? null : !b ? a : (new Date(a) > new Date(b) ? a : b));

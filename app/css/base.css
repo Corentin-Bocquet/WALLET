@@ -8,6 +8,10 @@ html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
   background: var(--bg);
+  /* Une app ne se zoome pas : on défile, on ne pince pas. Le double-tap
+     n'agrandit plus rien non plus. */
+  touch-action: pan-x pan-y;
+  overflow-x: hidden;
 }
 
 body {
@@ -36,6 +40,10 @@ button, input, select, textarea {
   border: 0;
   margin: 0;
 }
+
+/* Safari zoome sur tout champ écrit en moins de 16 px, et la page reste
+   ensuite agrandie : aucun champ ne descend sous ce seuil. */
+input, select, textarea { font-size: max(16px, 1em); }
 button { cursor: pointer; touch-action: manipulation; }
 
 a { color: inherit; text-decoration: none; }
@@ -92,7 +100,10 @@ body[data-blur="on"] .sensitive {
   filter: blur(9px);
   transition: filter var(--dur) var(--ease);
 }
-body[data-blur="on"] .sensitive:active { filter: blur(0); }
+/* Un toucher révèle le montant, un second le masque à nouveau : garder le
+   doigt appuyé cachait justement le chiffre qu'on voulait lire. */
+body[data-blur="on"] .sensitive { cursor: pointer; -webkit-user-select: none; user-select: none; }
+body[data-blur="on"] .sensitive.revealed { filter: none; }
 
 /* — Structure d'écran ————————————————————————————————— */
 #app {

@@ -197,7 +197,14 @@
   flex: 0 0 auto;
   transition: transform var(--dur-fast) var(--ease), background var(--dur-fast);
   vertical-align: middle;
+  padding: 0;
+  line-height: 0;
+  position: relative;
+  margin-left: 6px;
 }
+/* Zone de toucher de 40 px autour d'une pastille de 20 px. */
+.info-chip::after { content: ''; position: absolute; inset: -10px; }
+.info-chip svg { display: block; }
 .info-chip:active { transform: scale(.85); background: var(--surface-3); }
 
 /* — Badges ————————————————————————————————————————— */

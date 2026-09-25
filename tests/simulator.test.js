@@ -50,3 +50,14 @@ test('une date antérieure à l’historique est refusée avec une explication',
   assert.equal(r.available, false);
   assert.match(r.reason, /commencent/);
 });
+
+test('prix potentiel du Bitcoin à une date : trois scénarios ordonnés, futur seulement', async () => {
+  const { btcPriceAt } = await import('../app/js/engine/simulator.js');
+  const r = btcPriceAt({ btcHistory: HISTORY, date: '2027-06-30' });
+  assert.equal(r.available, true);
+  assert.equal(r.projections.length, 3);
+  const [bear, base, bull] = r.projections.map((p) => p.target);
+  assert.ok(bear <= base && base <= bull, 'bear ≤ base ≤ bull');
+  assert.ok(r.low === bear && r.high === bull);
+  assert.equal(btcPriceAt({ btcHistory: HISTORY, date: '2020-01-01' }).available, false);
+});

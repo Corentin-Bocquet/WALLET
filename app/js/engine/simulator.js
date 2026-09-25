@@ -248,6 +248,58 @@ export function simulate({
   };
 }
 
+/**
+ * Prix potentiel du Bitcoin à une date choisie, pour chaque scénario.
+ * Même trajectoire que le simulateur : la moyenne 200 semaines qui progresse
+ * à son rythme récent, et le multiple du cycle de quatre ans à cette date.
+ * Une date au sommet attendu du cycle donne un prix plus haut qu'une date
+ * au creux, même si elle est plus lointaine : c'est le cycle, pas une erreur.
+ */
+export function btcPriceAt({ btcHistory, scenarios = [], date }) {
+  const btc = normalize(btcHistory);
+  const trend = maTrend(btc.map((p) => p.close));
+  if (btc.length < 2 || !trend) {
+    return { available: false, reason: 'Il faut au moins 200 jours de prix du Bitcoin pour projeter le cycle.' };
+  }
+  const last = btc[btc.length - 1];
+  const t = Date.parse(`${date}T00:00:00Z`);
+  if (!Number.isFinite(t) || t <= last.t) {
+    return { available: false, reason: 'Choisissez une date dans le futur.' };
+  }
+
+  const peaks = (scenarios.length ? scenarios : DEFAULT_PEAKS)
+    .map((s) => ({ kind: s.kind, name: s.name, note: s.assumptions?.note ?? null,
+      peak: Number(s.assumptions?.multiple_of_200w_ma ?? s.peak), probability: s.probability ?? null }))
+    .filter((s) => Number.isFinite(s.peak) && s.peak > 0);
+
+  const projections = ['bear', 'base', 'bull'].map((kind, i) => {
+    const s = peaks.find((p) => p.kind === kind) ?? peaks[Math.min(i, peaks.length - 1)];
+    const point = projectBtc({ lastT: last.t, lastPrice: last.close, trend, peak: s.peak })(t);
+    return { kind, name: s.name ?? kind, note: s.note, peak: s.peak, target: point.price, multiple: point.multiple };
+  });
+  const prices = projections.map((p) => p.target);
+  const days = (t - last.t) / DAY;
+  const phaseDays = daysSinceHalving(t);
+  const phase = phaseDays < 400 ? 'hausse qui suit le halving'
+    : phaseDays < 700 ? 'zone habituelle du sommet de cycle'
+      : phaseDays < 1100 ? 'zone habituelle de baisse et de creux'
+        : 'reprise avant le prochain halving';
+
+  return {
+    available: true,
+    date,
+    price_now: last.close,
+    low: Math.min(...prices),
+    high: Math.max(...prices),
+    central: projections.find((p) => p.kind === 'base')?.target ?? prices[1],
+    projections,
+    ma_now: trend.ma,
+    ma_then: trend.ma * (1 + trend.growth) ** (days / 365.25),
+    ma_growth_pct: trend.growth * 100,
+    phase,
+  };
+}
+
 const DEFAULT_PEAKS = [
   { kind: 'bear', name: 'Bear', peak: 1.0 },
   { kind: 'base', name: 'Base', peak: 2.4 },

@@ -253,13 +253,26 @@ body::before {
   color: var(--text-on-accent); background: var(--accent);
   box-shadow: 0 4px 14px color-mix(in srgb, var(--accent) 35%, transparent);
 }
+/* 16 px minimum : en dessous, Safari zoome sur le champ au toucher et la
+   page reste agrandie, ce qui faisait déborder tout l'écran Marchés. */
 .chip-select, .date-input, .amount-input, .big-input {
-  border-radius: var(--r-pill); padding: 8px 14px; font-weight: 600; font-size: var(--fs-sm);
+  border-radius: var(--r-pill); padding: 8px 14px; font-weight: 600; font-size: 16px;
   background: var(--glass-fill); box-shadow: inset 0 0 0 1px var(--glass-edge-soft); color: var(--text);
-  min-width: 0;
+  min-width: 0; max-width: 100%; box-sizing: border-box;
+  -webkit-appearance: none; appearance: none;
 }
+/* Le menu « Autre crypto » prenait la largeur de son plus long intitulé et
+   sortait de sa carte : il tient désormais sur la ligne, texte tronqué. */
+.chip-select {
+  flex: 1 1 160px; width: 100%;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center; background-size: 16px;
+}
+.date-input { min-height: 38px; flex: 0 1 auto; }
 .amount-input { width: 96px; }
-.big-input { flex: 1; font-size: 22px; font-weight: 800; padding: 12px 18px; }
+.big-input { flex: 1; width: 100%; font-size: 22px; font-weight: 800; padding: 12px 18px; }
 .date-input { color-scheme: dark; }
 :root[data-theme="light"] .date-input { color-scheme: light; }
 .result-block { margin-top: 20px; padding-top: 18px; border-top: 1px solid var(--glass-edge-soft); }
