@@ -239,3 +239,15 @@ test('« mon patrimoine » ne désigne pas la crypto MON, sauf écrite en majusc
   assert.equal(extractSymbol('Combien ai-je en MON ?', known), 'MON');
   assert.equal(extractSymbol('Combien ai-je de sol ?', known), 'SOL');
 });
+
+test('une question sur tout le patrimoine ne part jamais sur une crypto écrite en minuscules', async () => {
+  const { extractSymbol, detectIntent, SUGGESTIONS } = await import('../app/js/engine/assistant.js');
+  // Un symbole qui ressemble à un mot de la question, absent de la liste des mots courants.
+  const known = ['BTC', 'MON', 'VAUT', 'TOTAL', 'SOL'];
+  for (const q of ['Combien vaut mon patrimoine ?', 'Quel est le total de mon patrimoine ?', SUGGESTIONS[1]]) {
+    const symbol = extractSymbol(q, known);
+    assert.equal(symbol, null, q);
+    assert.equal(detectIntent(q, { symbol }), 'net_worth', q);
+  }
+  assert.equal(extractSymbol('Combien de BTC dans mon patrimoine ?', known), 'BTC');
+});

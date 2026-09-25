@@ -16,7 +16,7 @@ import {
   emptyState, asyncBlock, badge, changeBadge, estimateBadge, accordion, errorState,
   subNav, MARKETS_NAV, zoneTag,
 } from '../components/ui.js';
-import { explainChip, labelWithInfo, showReasoning } from '../components/explain.js';
+import { explainChip, labelWithInfo, metricChip, showReasoning } from '../components/explain.js';
 import { arcGauge, areaChart, sparkline, zoneBar } from '../components/chart.js';
 import { money, pct, num, compact, day as fmtDay, trendClass, score as fmtScore, bigMoney } from '../lib/fmt.js';
 import { assetAvatar } from '../components/brand.js';
@@ -181,11 +181,15 @@ async function renderBarometer(host) {
 /* Fiche d'un actif                                                    */
 /* ================================================================== */
 
+// « Max » demande vingt ans : le serveur renvoie tout ce qu'il a, depuis la
+// première cotation connue de l'actif.
+const MAX_DAYS = 7300;
 const RANGES = [
   { key: 30, label: '1 M' },
   { key: 90, label: '3 M' },
   { key: 365, label: '1 A' },
-  { key: 1500, label: 'Max' },
+  { key: 1825, label: '5 A' },
+  { key: MAX_DAYS, label: 'Max' },
 ];
 
 export async function assetScreen({ params }) {
@@ -208,8 +212,11 @@ export async function assetScreen({ params }) {
   // L'étoile change de couleur AVANT l'aller-retour serveur : un favori est
   // une intention, pas une transaction. Si le serveur refuse, on revient en
   // arrière et on le dit — plutôt que de laisser l'étoile figée sans un mot.
+  // Étoile pleine quand l'actif est suivi, comme le ★ de la liste.
   const paintStar = (button, on) => {
     button.style.color = on ? 'var(--accent)' : 'var(--text-2)';
+    const svg = button.querySelector('svg');
+    if (svg) svg.style.fill = on ? 'currentColor' : 'none';
     button.setAttribute('aria-pressed', String(on));
     button.setAttribute('aria-label', on ? 'Retirer de ma liste' : 'Ajouter à ma liste');
   };
@@ -235,13 +242,15 @@ export async function assetScreen({ params }) {
       }
     },
   }, glyph('star'));
+  paintStar(star, watched);
 
   screen.append(subScreenHead(asset.name, { right: star }));
 
   const quote = asset.quote || {};
   screen.append(
     bigAmount(quote.price, {
-      label: asset.symbol,
+      label: h('span', { style: { display: 'inline-flex', alignItems: 'center' } },
+        asset.symbol, metricChip('price', { symbol: asset.symbol, quote })),
       changePct: quote.change_24h,
       changeLabel: 'sur 24 h',
     }),
@@ -270,9 +279,14 @@ export async function assetScreen({ params }) {
   async function drawChart() {
     mount(chartHost, h('div.skeleton', { style: { height: '180px' } }));
     try {
-      if (!history.length) history = await repo.getPriceHistory(asset.id, 1500);
-      const slice = history.slice(-days);
+      if (!history.length) history = await repo.getPriceHistory(asset.id, MAX_DAYS);
+      const slice = thin(history.slice(-days), 900);
       mount(chartHost, areaChart(slice.map((p) => ({ day: p.day, value: Number(p.close) })), { height: 180 }));
+      const first = history[0]?.day;
+      if (days === MAX_DAYS && first) {
+        chartHost.append(h('p.muted', { style: { fontSize: 'var(--fs-xs)', marginTop: '6px', textAlign: 'center' } },
+          `Historique disponible depuis le ${fmtDay(first, { long: true })}`));
+      }
     } catch (error) {
       mount(chartHost, errorState(error, { what: "l'historique", onRetry: drawChart }));
     }
@@ -287,7 +301,7 @@ export async function assetScreen({ params }) {
   mount(scoreHost, h('div.skeleton', { style: { height: '140px' } }));
 
   /* Chiffres clés, toujours visibles mais compacts */
-  screen.append(section('Chiffres clés', {}, keyFigures(quote)));
+  screen.append(section('Chiffres clés', {}, keyFigures(asset, quote)));
 
   /* Indicateurs : masqués par défaut en mode simple (§39, §49) */
   const indicatorsHost = h('div');
@@ -298,24 +312,25 @@ export async function assetScreen({ params }) {
   return screen;
 }
 
-function keyFigures(quote) {
+function keyFigures(asset, quote) {
+  const ctx = { symbol: asset.symbol, name: asset.name, quote };
   const rows = [
-    ['Capitalisation', quote.market_cap ? bigMoney(quote.market_cap) : '—'],
-    ['Volume 24 h', quote.volume_24h ? bigMoney(quote.volume_24h) : '—'],
-    ['Plus haut historique', quote.ath ? money(quote.ath) : '—', quote.ath_date ? fmtDay(quote.ath_date, { long: true }) : null],
+    ['Capitalisation', quote.market_cap ? bigMoney(quote.market_cap) : '—', null, 'market_cap'],
+    ['Volume 24 h', quote.volume_24h ? bigMoney(quote.volume_24h) : '—', null, 'volume_24h'],
+    ['Plus haut historique', quote.ath ? money(quote.ath) : '—', quote.ath_date ? fmtDay(quote.ath_date, { long: true }) : null, 'ath'],
     ['Distance au plus haut',
       quote.ath && quote.price ? pct(((quote.price / quote.ath) - 1) * 100) : '—', null, 'drawdown'],
-    ['Plus bas historique', quote.atl ? money(quote.atl) : '—', quote.atl_date ? fmtDay(quote.atl_date, { long: true }) : null],
-    ['Offre en circulation', quote.circulating_supply ? compact(quote.circulating_supply) : '—'],
-    ['Sur 7 jours', Number.isFinite(quote.change_7d) ? pct(quote.change_7d) : '—'],
-    ['Sur 1 an', Number.isFinite(quote.change_1y) ? pct(quote.change_1y) : '—'],
+    ['Plus bas historique', quote.atl ? money(quote.atl) : '—', quote.atl_date ? fmtDay(quote.atl_date, { long: true }) : null, 'atl'],
+    ['Offre en circulation', quote.circulating_supply ? compact(quote.circulating_supply) : '—', null, 'circulating_supply'],
+    ['Sur 7 jours', Number.isFinite(quote.change_7d) ? pct(quote.change_7d) : '—', null, 'change_7d'],
+    ['Sur 1 an', Number.isFinite(quote.change_1y) ? pct(quote.change_1y) : '—', null, 'change_1y'],
   ];
 
   return h('div.rows',
-    rows.map(([label, value, sub, explain]) => h('div.row', { style: { gridTemplateColumns: '1fr auto' } },
+    rows.map(([label, value, sub, key]) => h('div.row', { style: { gridTemplateColumns: '1fr auto' } },
       h('div.row__main',
-        h('div.row__title', { style: { fontWeight: '500' } },
-          label, explain ? explainChip(explain, { label }) : null),
+        h('div.row__title', { style: { fontWeight: '500', display: 'flex', alignItems: 'center' } },
+          label, metricChip(key, ctx, { glossary: key === 'drawdown' ? 'drawdown' : null })),
         sub ? h('div.row__sub', sub) : null,
       ),
       h('div.row__end', h('div.row__value', value)),
@@ -356,7 +371,7 @@ async function renderScoreAndIndicators({ asset, scoreHost, indicatorsHost, adva
     }, model);
 
     mount(scoreHost, scoreCard(asset, result, model));
-    mount(indicatorsHost, indicatorList(computed, market, advanced));
+    mount(indicatorsHost, indicatorList(computed, market, advanced, asset));
   } catch (error) {
     mount(scoreHost, errorState(error, { what: 'le score' }));
     mount(indicatorsHost, h('div'));
@@ -428,20 +443,24 @@ function colorForFactor(value) {
   return 'var(--zone-distribution)';
 }
 
-function indicatorList(computed, market, advanced) {
+function indicatorList(computed, market, advanced, asset) {
+  const ctx = { symbol: asset.symbol, name: asset.name, quote: asset.quote || {} };
   const simple = [
     computed.drawdown && {
       code: 'drawdown', label: 'Distance au sommet',
       value: pct(computed.drawdown.value), derived: false,
+      help: 'drawdown', raw: computed.drawdown.value,
     },
     computed.cycle && {
       code: 'cycle_position', label: 'Position dans le cycle',
       value: computed.cycle.value === null ? '—' : `${Math.round(computed.cycle.value)} / 100`,
       sub: computed.cycle.phase, derived: computed.cycle.is_derived,
+      help: 'cycle_position', raw: computed.cycle.value, extra: computed.cycle.phase,
     },
     market.fear_greed && {
       code: 'fear_greed', label: 'Fear & Greed',
       value: String(market.fear_greed.value), derived: market.fear_greed.is_derived,
+      help: 'fear_greed', raw: Number(market.fear_greed.value),
     },
   ].filter(Boolean);
 
@@ -449,32 +468,39 @@ function indicatorList(computed, market, advanced) {
     computed.mayer && {
       code: 'mayer', label: 'Multiple de Mayer',
       value: computed.mayer.value?.toFixed(2), sub: computed.mayer.note, derived: false,
+      help: 'mayer', raw: computed.mayer.value,
     },
     computed.ma200w && {
       code: 'mayer', label: 'Multiple de la moyenne 200 semaines',
       value: computed.ma200w.value?.toFixed(2),
       sub: `Moyenne : ${money(computed.ma200w.reference)}`, derived: false,
+      help: 'ma200w', raw: computed.ma200w.value, extra: `moyenne ${money(computed.ma200w.reference)}`,
     },
     computed.mvrv_proxy && {
       code: 'mvrv', label: 'MVRV (approximation)',
       value: computed.mvrv_proxy.value?.toFixed(2),
       sub: computed.mvrv_proxy.note, derived: true,
+      help: 'mvrv', raw: computed.mvrv_proxy.value,
     },
     computed.volatility && {
       code: 'drawdown', label: 'Volatilité annualisée',
       value: computed.volatility.value === null ? '—' : `${Math.round(computed.volatility.value)} %`,
       sub: computed.volatility.note, derived: false,
+      help: 'volatility', raw: computed.volatility.value,
     },
     computed.momentum && {
       code: 'mayer', label: 'Performance 90 jours',
       value: pct(computed.momentum.value_90d), derived: false,
+      help: 'change_90d', raw: computed.momentum.value_90d,
     },
   ].filter(Boolean);
 
   const render = (items) => h('div.rows', items.map((item) => h('div.row', { style: { gridTemplateColumns: '1fr auto' } },
     h('div.row__main',
-      h('div.row__title', { style: { fontWeight: '500' } },
-        item.label, explainChip(item.code, { label: item.label })),
+      h('div.row__title', { style: { fontWeight: '500', display: 'flex', alignItems: 'center' } },
+        item.label, item.help
+          ? metricChip(item.help, { ...ctx, value: item.raw, extra: item.extra }, { glossary: item.code })
+          : explainChip(item.code, { label: item.label })),
       item.sub ? h('div.row__sub', { style: { whiteSpace: 'normal' } }, item.sub) : null,
     ),
     h('div.row__end',
@@ -491,4 +517,14 @@ function indicatorList(computed, market, advanced) {
           () => render(expert), { open: advanced })
       : null,
   );
+}
+
+/** Allège une longue série pour le tracé, en gardant toujours le dernier point. */
+function thin(points, max) {
+  if (points.length <= max) return points;
+  const step = points.length / max;
+  const out = [];
+  for (let i = 0; i < max - 1; i += 1) out.push(points[Math.floor(i * step)]);
+  out.push(points[points.length - 1]);
+  return out;
 }

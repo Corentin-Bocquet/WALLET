@@ -400,9 +400,12 @@ function renderAccounts(accounts, holdings = []) {
   // Un exchange détient des liquidités ET des positions. N'afficher que l'un
   // des deux donnait un compte à « — » alors qu'il pesait plusieurs milliers.
   const positionsByAccount = new Map();
+  const syncedByAccount = new Map();
   for (const holding of holdings) {
     const id = holding.account_id ?? holding.account?.id;
-    if (!id || !Number.isFinite(holding.value)) continue;
+    if (!id) continue;
+    if (holding.synced_at && !(syncedByAccount.get(id) > holding.synced_at)) syncedByAccount.set(id, holding.synced_at);
+    if (!Number.isFinite(holding.value)) continue;
     positionsByAccount.set(id, (positionsByAccount.get(id) ?? 0) + holding.value);
   }
 
@@ -426,15 +429,19 @@ function renderAccounts(accounts, holdings = []) {
         known
           ? h('div.row__value.sensitive', money(totalValue))
           : h('div.row__value.unknown', '—'),
-        positions > 0 && cash > 0
-          ? h('div.row__sub.muted-2', `dont ${money(cash, { decimals: 0 })} de liquidités`)
-          : (known
-              ? h('div.row__sub', freshness(account.balance_at, { prefix: '', thresholdSeconds: 86400 }))
-              : h('div.row__sub.muted-2', 'solde inconnu')),
+        // Pour chaque compte, la même information : quand il a été mis à
+        // jour. Le détail des liquidités d'un exchange n'apprenait rien et
+        // prenait la place de cette date.
+        known
+          ? h('div.row__sub', freshness(latest(account.balance_at, syncedByAccount.get(account.id)),
+              { prefix: '', thresholdSeconds: 86400 }))
+          : h('div.row__sub.muted-2', 'solde inconnu'),
       );
     })(),
   )));
 }
+
+const latest = (a, b) => (!a ? b ?? null : !b ? a : (new Date(a) > new Date(b) ? a : b));
 
 async function renderBehaviour(host) {
   try {

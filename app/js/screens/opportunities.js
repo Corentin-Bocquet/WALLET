@@ -55,7 +55,7 @@ export async function opportunitiesScreen() {
   mount(alts, loadingBlock(140));
 
   const backtest = h('div');
-  screen.append(section('Et si j’avais…', { explain: 'dca' }, backtest));
+  screen.append(section('Et si j’avais investi…', { explain: 'dca' }, backtest));
   mount(backtest, loadingBlock(220));
 
   renderAll({ zones, scenarios, alts, backtest });
@@ -170,61 +170,86 @@ function zoneLegend(model) {
 
 async function renderScenarios(host, btc) {
   try {
-    const [history, scenarios] = await Promise.all([
-      repo.getPriceHistory(btc.id, 1500),
+    const [history, scenarios, { btcPriceAt }] = await Promise.all([
+      repo.getPriceHistory(btc.id, 2200),
       repo.listScenarios(btc.id),
+      import('../engine/simulator.js'),
     ]);
 
-    const computed = computeIndicators(history);
-    const ma200w = computed.ma200w?.reference ?? null;
-    const projection = projectFromMa200w(ma200w, scenarios);
+    const today = new Date().toISOString().slice(0, 10);
+    const shift = (months) => {
+      const d = new Date(`${today}T00:00:00Z`);
+      d.setUTCMonth(d.getUTCMonth() + months);
+      return d.toISOString().slice(0, 10);
+    };
+    const PRESETS = [['6 mois', 6], ['1 an', 12], ['2 ans', 24], ['3 ans', 36], ['5 ans', 60]];
+    let date = shift(12);
+    const card = h('div.card');
 
-    if (!projection.available) {
-      mount(host, h('div.notice',
-        h('span', 'ℹ'),
-        h('div', h('strong', 'Projection indisponible'), projection.reason)));
-      return;
-    }
+    const paint = () => {
+      const r = btcPriceAt({ btcHistory: history, scenarios, date });
+      const current = btc.quote?.price ?? r.price_now ?? null;
+      const dateInput = h('input.date-input', {
+        type: 'date', value: date, min: shift(1), max: shift(240), 'aria-label': 'Date de la projection',
+        onchange: (event) => { if (event.target.value) { date = event.target.value; paint(); } },
+      });
 
-    const current = btc.quote?.price ?? computed.price;
+      mount(card,
+        h('div.eyebrow', { style: { display: 'flex', alignItems: 'center' } }, 'Prix potentiel du Bitcoin',
+          explainChip('cycle_position', { label: 'cycle' })),
+        h('div.muted', { style: { fontSize: 'var(--fs-sm)', marginTop: '4px' } }, 'À quelle date ?'),
+        h('div.chip-line', PRESETS.map(([label, months]) => h('button.chip', {
+          type: 'button', 'data-sound': 'select', 'aria-pressed': String(date === shift(months)),
+          onclick: () => { date = shift(months); paint(); },
+        }, label)), dateInput),
 
-    mount(host, h('div.card',
-      h('div.eyebrow', 'Prix potentiel du Bitcoin', explainChip('cycle_position', { label: 'cycle' })),
+        !r.available
+          ? h('div.notice', { style: { marginTop: '16px' } }, h('span', glyph('info')),
+              h('div', h('strong', 'Projection indisponible'), r.reason))
+          : [
+              h('div.muted', { style: { marginTop: '18px', fontSize: 'var(--fs-sm)' } },
+                `Le ${fmtDay(date, { long: true })}, le Bitcoin pourrait valoir`),
+              // Jamais un chiffre seul : la fourchette d'abord, le central ensuite (§48).
+              h('div.display.num', { style: { marginTop: '4px', fontSize: '30px' } }, range(r.low, r.high)),
+              h('div.muted', { style: { marginTop: '6px' } },
+                'Scénario central : ',
+                h('strong', { style: { color: 'var(--text)' } }, money(r.central, { compact: true, decimals: 0 })),
+                current ? ` · ${(r.central / current).toFixed(1)}× le prix actuel` : null),
 
-      // Jamais un chiffre seul : la fourchette d'abord, le central ensuite (§48).
-      h('div.display.num', { style: { marginTop: '8px', fontSize: '30px' } },
-        range(projection.low, projection.high)),
-      h('div.muted', { style: { marginTop: '6px' } },
-        'Scénario central : ',
-        h('strong', { style: { color: 'var(--text)' } }, money(projection.central, { compact: true, decimals: 0 })),
-        projection.expected ? ` · espérance pondérée ${money(projection.expected, { compact: true, decimals: 0 })}` : null,
-      ),
+              h('div.rows', { style: { marginTop: '16px' } },
+                r.projections.map((p) => h('div.row', { style: { gridTemplateColumns: 'auto 1fr auto' } },
+                  h('div.avatar.avatar--dot', {
+                    style: { background: ({ bear: 'var(--down)', base: 'var(--zone-neutral)', bull: 'var(--up)' })[p.kind] ?? 'var(--neutral)' },
+                  }),
+                  h('div.row__main',
+                    h('div.row__title', p.name),
+                    h('div.row__sub', { style: { whiteSpace: 'normal' } },
+                      p.note || `Sommet de cycle à ${num(p.peak, { decimals: 1 })}× la moyenne 200 semaines`)),
+                  h('div.row__end',
+                    h('div.row__value', money(p.target, { compact: true, decimals: 0 })),
+                    h('div.row__sub', current ? `${times(p.target / current)} aujourd’hui` : null)),
+                ))),
 
-      h('div.rows', { style: { marginTop: '20px' } },
-        projection.projections.map((p) => h('div.row', { style: { gridTemplateColumns: 'auto 1fr auto' } },
-          h('div.avatar.avatar--dot', {
-            style: { background: ({ bear: 'var(--down)', base: 'var(--zone-neutral)', bull: 'var(--up)' })[p.kind] ?? 'var(--neutral)' },
-          }),
-          h('div.row__main',
-            h('div.row__title', p.name),
-            h('div.row__sub', { style: { whiteSpace: 'normal' } }, p.assumption),
-          ),
-          h('div.row__end',
-            h('div.row__value', money(p.target, { compact: true, decimals: 0 })),
-            h('div.row__sub', current ? `${(p.target / current).toFixed(1)}× le prix actuel` : null),
-          ),
-        ))),
+              h('div.notice', { style: { marginTop: '16px' } },
+                h('span', glyph('ruler')),
+                h('div',
+                  h('strong', 'Comment c’est calculé'),
+                  `À cette date, le Bitcoin serait en ${r.phase}. On part de sa moyenne sur 200 semaines `
+                  + `(${money(r.ma_now, { decimals: 0 })} aujourd’hui, environ ${money(r.ma_then, { decimals: 0 })} à cette date au rythme récent de `
+                  + `+${Math.round(r.ma_growth_pct)} % par an), puis on applique le multiple du cycle de quatre ans : sommet 12 à 18 mois après le halving, `
+                  + 'creux un an plus tard. Chaque scénario fixe la hauteur du sommet (bouton « Modifier »). Ce sont des hypothèses, pas des prévisions.')),
+            ],
+      );
+    };
 
-      h('div.notice', { style: { marginTop: '18px' } },
-        h('span', glyph('ruler')),
-        h('div',
-          h('strong', 'Comment c’est calculé'),
-          `Base : ${money(projection.basis, { decimals: 0 })}, la ${projection.basis_label}. Chaque scénario applique un multiple que vous fixez. ${projection.disclaimer}`)),
-    ));
+    paint();
+    mount(host, card);
   } catch (error) {
     mount(host, errorState(error, { what: 'les scénarios' }));
   }
 }
+
+const times = (x) => `${x.toFixed(1).replace('.', ',')}×`;
 
 /** Cryptos proposées en premier : celles que l'on détient, puis sa liste. */
 async function preferredAlts(assets) {
@@ -363,6 +388,9 @@ async function renderSimulator(host, btc, assets, model) {
         onchange: (event) => { state.amount = Math.max(1, Number(event.target.value) || state.amount); update(); },
       });
       mount(card,
+        h('p.muted', { style: { fontSize: 'var(--fs-sm)', marginBottom: '14px' } },
+          'Combien aurais-tu aujourd’hui si tu avais investi dans une crypto ? Choisis la crypto, le montant, '
+          + 'la date de départ et la durée. Une date passée rejoue les vrais prix ; une date future suit les scénarios du cycle.'),
         h('div.eyebrow', 'Crypto'),
         h('div.chip-line', choices.map((a) => h('button.chip', {
           type: 'button', 'data-sound': 'select', 'aria-pressed': String(a.id === state.asset.id),

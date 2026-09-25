@@ -248,10 +248,20 @@ export const supabaseBackend = {
   async getPriceHistory(assetId, days = 365) {
     const sb = await getClient();
     const since = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
-    return unwrap(await sb.from('price_history')
-      .select('day, close, volume')
-      .eq('asset_id', assetId).gte('day', since)
-      .order('day', { ascending: true }), 'priceHistory') || [];
+    // Le serveur renvoie au plus 1 000 lignes par requête : au-delà de trois
+    // ans d'historique, on lit par pages, sinon « Max » s'arrêterait en 2021.
+    const PAGE = 1000;
+    const out = [];
+    for (let from = 0; from < 20 * PAGE; from += PAGE) {
+      const rows = unwrap(await sb.from('price_history')
+        .select('day, close, volume')
+        .eq('asset_id', assetId).gte('day', since)
+        .order('day', { ascending: true })
+        .range(from, from + PAGE - 1), 'priceHistory') || [];
+      out.push(...rows);
+      if (rows.length < PAGE) break;
+    }
+    return out;
   },
 
   async getWatchlist() {

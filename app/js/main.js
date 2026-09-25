@@ -139,6 +139,26 @@ async function autoSyncExchanges() {
   }
 }
 
+/* Pas de zoom au pincement
+   iOS ignore « user-scalable=no » dans Safari : seuls ces événements
+   propriétaires permettent de bloquer le pincement, qui déréglait la mise
+   en page des écrans Marchés et Opportunités. */
+for (const type of ['gesturestart', 'gesturechange', 'gestureend']) {
+  document.addEventListener(type, (event) => event.preventDefault(), { passive: false });
+}
+
+/* Montants masqués : toucher pour révéler, retoucher pour masquer */
+
+document.addEventListener('click', (event) => {
+  if (document.body.dataset.blur !== 'on') return;
+  const amount = event.target.closest?.('.sensitive');
+  if (!amount) return;
+  // Le toucher sert à révéler : il ne doit pas aussi ouvrir la ligne.
+  event.preventDefault();
+  event.stopPropagation();
+  amount.classList.toggle('revealed');
+}, true);
+
 /* — Préférences ————————————————————————————————————— */
 
 async function applySettings() {
@@ -221,19 +241,40 @@ function registerServiceWorker() {
   function register() {
     navigator.serviceWorker.register(new URL('../sw.js', import.meta.url), { scope: './' })
       .then((registration) => {
+        // Sur iPhone, une app installée reste ouverte en arrière-plan des
+        // jours entiers : sans ces vérifications, une correction publiée
+        // n'arrivait jamais, l'ancienne version restait en cache.
+        document.addEventListener('visibilitychange', () => {
+          if (document.visibilityState === 'visible') registration.update().catch(() => {});
+        });
+
+        const apply = (worker) => {
+          // La nouvelle version s'installe d'elle-même, sans attendre que
+          // l'utilisateur touche un bandeau qu'il ne voyait pas.
+          worker.postMessage({ type: 'SKIP_WAITING' });
+        };
+        if (registration.waiting && navigator.serviceWorker.controller) apply(registration.waiting);
+
         registration.addEventListener('updatefound', () => {
           const installing = registration.installing;
           if (!installing) return;
           installing.addEventListener('statechange', () => {
-            if (installing.state === 'installed' && navigator.serviceWorker.controller) {
-              // Une mise à jour est prête : on propose, on n'impose pas —
-              // recharger au milieu d'une saisie serait hostile.
-              toast('Mise à jour disponible. Touchez pour l’appliquer.', { duration: 8000 });
-              document.querySelector('.toast')?.addEventListener('click', () => {
-                installing.postMessage({ type: 'SKIP_WAITING' });
-                window.location.reload();
-              });
-            }
+            if (installing.state === 'installed' && navigator.serviceWorker.controller) apply(installing);
+          });
+        });
+
+        // Nouvelle version active : on recharge aussitôt (le hash garde
+        // l'écran en cours), pour ne jamais mélanger des fichiers de deux
+        // versions. Seule exception, une saisie en cours : on attend qu'elle
+        // se termine ou que l'app passe en arrière-plan.
+        let reloading = false;
+        navigator.serviceWorker.addEventListener('controllerchange', () => {
+          const reload = () => { if (!reloading) { reloading = true; window.location.reload(); } };
+          const typing = () => document.activeElement?.matches?.('input, textarea, select');
+          if (!typing() || document.visibilityState === 'hidden') { reload(); return; }
+          document.addEventListener('focusout', () => setTimeout(() => { if (!typing()) reload(); }, 300));
+          document.addEventListener('visibilitychange', () => {
+            if (document.visibilityState === 'hidden') reload();
           });
         });
       })

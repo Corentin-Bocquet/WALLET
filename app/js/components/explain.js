@@ -14,29 +14,88 @@ import { h, mount } from '../lib/dom.js';
 import { openSheet } from '../lib/sheet.js';
 import { feedback } from '../lib/feedback.js';
 import { getGlossary } from '../data/repo.js';
+import { explainMetric } from '../engine/metricHelp.js';
 
-const memory = new Map();
+// Un « i » dessiné plutôt que le caractère ⓘ : le caractère est déjà cerclé,
+// il se retrouvait dans un second cercle et sa position variait selon la police.
+const INFO_MARK = '<svg viewBox="0 0 20 20" width="12" height="12" aria-hidden="true" style="display:block">'
+  + '<circle cx="10" cy="4.6" r="2" fill="currentColor"/>'
+  + '<rect x="8.2" y="8" width="3.6" height="9.4" rx="1.8" fill="currentColor"/></svg>';
 
-/**
- * Puce ⓘ à poser à côté de n'importe quel terme.
- *   explainChip('mvrv')  →  <button class="info-chip">ⓘ</button>
- */
-export function explainChip(code, { label } = {}) {
-  return h('button.info-chip', {
+function infoButton(label, onOpen) {
+  const button = h('button.info-chip', {
     type: 'button',
-    'aria-label': `Qu'est-ce que ${label || code} ?`,
+    'aria-label': `Qu'est-ce que ${label} ?`,
     'data-sound': 'sheetOpen',
     onclick: (event) => {
       event.stopPropagation();
       event.preventDefault();
-      showExplanation(code, { label });
+      onOpen();
     },
-  }, 'ⓘ');
+  });
+  button.innerHTML = INFO_MARK;
+  return button;
+}
+
+const memory = new Map();
+
+/**
+ * Puce « i » à poser à côté de n'importe quel terme.
+ *   explainChip('mvrv')  →  <button class="info-chip">i</button>
+ */
+export function explainChip(code, { label } = {}) {
+  return infoButton(label || code, () => showExplanation(code, { label }));
+}
+
+/**
+ * Puce qui explique un chiffre DANS SON CONTEXTE : ce qu'il veut dire pour
+ * cette crypto aujourd'hui, un exemple en euros, pourquoi ça compte. Si un
+ * terme du glossaire existe, il reste accessible en dessous pour aller plus
+ * loin.
+ *   metricChip('market_cap', { symbol: 'BTC', quote })
+ */
+export function metricChip(key, context, { glossary = null } = {}) {
+  const help = explainMetric(key, context);
+  if (!help) return glossary ? explainChip(glossary) : null;
+  return infoButton(help.title, () => showMetric(help, glossary));
+}
+
+function showMetric(help, glossary) {
+  const blocks = [
+    h('p.explain__q', 'En clair'),
+    h('p', help.simple),
+  ];
+  if (help.now) blocks.push(h('p.explain__q', 'Ici, maintenant'), h('p', help.now));
+  if (help.example) blocks.push(h('p.explain__q', 'Exemple'), h('p', help.example));
+  if (help.why) blocks.push(h('p.explain__q', 'Pourquoi ça compte'), h('p', help.why));
+
+  const body = h('div', blocks);
+  if (glossary) {
+    const more = h('button.explain__more', {
+      type: 'button', 'data-sound': 'select',
+      onclick: async () => {
+        feedback.select();
+        let entry = memory.get(glossary);
+        if (!entry) {
+          entry = await getGlossary(glossary).catch(() => null);
+          if (entry) memory.set(glossary, entry);
+        }
+        more.replaceWith(entry
+          ? h('div', h('p.explain__q', 'En détail'), h('p', entry.level2 || entry.level1),
+            entry.level3 ? h('p', { style: { marginTop: '10px' } }, entry.level3) : null,
+            entry.formula ? h('div.explain__formula', entry.formula) : null)
+          : h('p.muted', 'Pas d’explication avancée pour ce terme.'));
+      },
+    }, 'Aller plus loin →');
+    body.append(more);
+  }
+  body.append(h('p.explain__source', 'Calculé sur l’appareil avec les chiffres affichés. Ce n’est pas un conseil.'));
+  openSheet({ title: help.title, build: () => body });
 }
 
 /** Titre + puce, l'assemblage le plus courant : « MVRV ⓘ ». */
 export function labelWithInfo(text, code, tag = 'span') {
-  return h(tag, { style: { display: 'inline-flex', alignItems: 'center', gap: '8px' } },
+  return h(tag, { style: { display: 'inline-flex', alignItems: 'center', gap: '2px' } },
     text, explainChip(code, { label: text }));
 }
 

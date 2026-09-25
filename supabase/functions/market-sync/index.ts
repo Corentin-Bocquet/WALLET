@@ -18,7 +18,7 @@
 import {
   preflight, json, fail, serviceClient, fetchJson, claimSlot, finishSlot, chunk,
 } from '../_shared/http.ts';
-import { dailyHistoryEur, okxSpotPrices } from '../_shared/marketdata.ts';
+import { dailyHistoryEur, okxSpotPrices, olderHistoryEur, usdToEurSeries } from '../_shared/marketdata.ts';
 
 const COINGECKO = 'https://api.coingecko.com/api/v3';
 const FEAR_GREED = 'https://api.alternative.me/fng/?limit=1';
@@ -179,6 +179,17 @@ Deno.serve(async (request) => {
       report.history += rows.length;
     }
 
+    /* 4 bis. Historique long
+       Même source, mais vers le passé : à chaque passage on recule de
+       quelques centaines de jours avant la plus ancienne date connue, jusqu'à
+       la première cotation de l'actif. BTC et ETH d'abord, puis le reste. En
+       quelques passages, « Max » couvre toute la vie de l'actif sur OKX.    */
+    try {
+      await backfillHistory(service, followed, usdToEur, report);
+    } catch {
+      report.warnings.push('Historique long : suite au prochain passage.');
+    }
+
     /* — 4. Fear & Greed ————————————————————————— */
     try {
       const fng = await fetchJson(FEAR_GREED, {}, { label: 'Fear & Greed', retries: 1 }) as { data?: Array<{ value: string; value_classification: string }> };
@@ -282,6 +293,64 @@ async function followedAssets(service: ReturnType<typeof serviceClient>) {
     .select('id, symbol, external_id').in('id', [...ids]);
   return assets ?? [];
 }
+
+// Budget par passage : ~25 appels de 100 jours, soit 7 ans d'historique,
+// sans risquer le temps maximal d'exécution de la fonction.
+const BACKFILL_PAGES_PER_RUN = 25;
+const BACKFILL_PAGES_PER_ASSET = 10;
+
+async function backfillHistory(
+  service: ReturnType<typeof serviceClient>,
+  followed: Array<{ id: string; symbol: string }>,
+  usdToEur: number | null,
+  report: { history: number; warnings: string[] },
+) {
+  const { data: states } = await service.from('sync_state')
+    .select('scope, payload').is('user_id', null).like('scope', 'history:%');
+  const done = new Set((states ?? [])
+    .filter((s) => (s.payload as { complete?: boolean })?.complete)
+    .map((s) => s.scope.slice('history:'.length)));
+
+  const todo = followed
+    .filter((a) => !done.has(a.id) && !STABLES.has(a.symbol.toUpperCase()))
+    .sort((a, b) => rankOf(a.symbol) - rankOf(b.symbol));
+  if (!todo.length) return;
+
+  const series = await usdToEurSeries('2010-01-01').catch(() => null);
+  const rateOn = (day: string) => series?.(day) ?? usdToEur;
+  // Sans aucun taux, les paires USDT seraient ignorées et l'actif marqué
+  // « complet » à tort : on retentera au prochain passage.
+  if (rateOn('2020-01-02') === null) return;
+
+  let budget = BACKFILL_PAGES_PER_RUN;
+  for (const asset of todo) {
+    if (budget <= 0) break;
+    const { data: first } = await service.from('price_history')
+      .select('day').eq('asset_id', asset.id)
+      .order('day', { ascending: true }).limit(1).maybeSingle();
+    if (!first) continue;   // l'historique récent passe d'abord
+
+    const { candles, complete, pages } = await olderHistoryEur(
+      asset.symbol, String(first.day).slice(0, 10), Math.min(budget, BACKFILL_PAGES_PER_ASSET), rateOn);
+    budget -= pages;
+
+    const rows = candles.map((c) => ({ asset_id: asset.id, currency: 'EUR', day: c.day, close: c.close }));
+    for (const batch of chunk(rows, 500)) {
+      await service.from('price_history').upsert(batch, { onConflict: 'asset_id,currency,day' });
+    }
+    report.history += rows.length;
+
+    if (complete) {
+      await service.from('sync_state').upsert({
+        user_id: null, scope: `history:${asset.id}`, status: 'ok',
+        last_success: new Date().toISOString(), items: rows.length,
+        payload: { complete: true, symbol: asset.symbol },
+      }, { onConflict: 'user_id,scope' });
+    }
+  }
+}
+
+const rankOf = (symbol: string) => ({ BTC: 0, ETH: 1 } as Record<string, number>)[symbol.toUpperCase()] ?? 2;
 
 async function needsHistory(service: ReturnType<typeof serviceClient>, assetId: string) {
   const { data } = await service.from('price_history')

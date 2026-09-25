@@ -164,7 +164,7 @@ function simpleSettings(settings) {
 
     switchRow({
       label: 'Masquer les montants',
-      hint: 'Floute les chiffres. Touchez un montant pour le révéler.',
+      hint: 'Floute les chiffres. Touchez un montant pour l’afficher, retouchez-le pour le masquer.',
       checked: Boolean(settings.privacy_blur),
       onChange: (value) => {
         document.body.dataset.blur = value ? 'on' : 'off';

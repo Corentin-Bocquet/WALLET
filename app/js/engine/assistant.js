@@ -135,7 +135,7 @@ export const INTENTS = [
 
 export const SUGGESTIONS = [
   'Fais-moi un bilan',
-  'Combien vaut mon patrimoine ?',
+  'Quel est le total de mon patrimoine ?',
   'Quelles sont mes positions ?',
   'Combien ai-je dépensé en restaurants ce mois-ci ?',
   "Quel est mon taux d'épargne ?",
@@ -210,9 +210,13 @@ export function extractSymbol(question, knownSymbols = []) {
   // parle pas de la crypto MON. Idem pour les symboles de deux lettres.
   const original = deaccent(String(question || ''));
   const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Une question sur le patrimoine entier ne vise pas une crypto, sauf si
+  // son symbole est écrit en MAJUSCULES : « combien de BTC dans mon
+  // patrimoine » reste une question sur le BTC.
+  const wholeWealth = /\b(patrimoine|fortune|mon total|en tout|au total)\b/.test(q);
   for (const symbol of knownSymbols) {
     const lower = symbol.toLowerCase();
-    const ambiguous = COMMON_WORDS.has(lower) || lower.length <= 2;
+    const ambiguous = wholeWealth || COMMON_WORDS.has(lower) || lower.length <= 2;
     const found = ambiguous
       ? new RegExp(`(^|[^A-Za-z0-9])${escape(symbol.toUpperCase())}([^A-Za-z0-9]|$)`).test(original)
       : new RegExp(`\\b${escape(lower)}\\b`).test(q);
